@@ -5,7 +5,9 @@ import { revalidatePath } from "next/cache";
 import { isCargoType } from "@/lib/cargo";
 import { requireSession } from "@/lib/guard";
 import { MAX_ROWS, parseShippedOn, type ShipmentDraft } from "@/lib/paste";
-import { createShipment, createShipments } from "@/lib/shipments";
+import { createEvidenceRequest } from "@/lib/evidence";
+import { isEvidenceKind } from "@/lib/evidence-kind";
+import { createShipment, createShipments, getShipment } from "@/lib/shipments";
 
 export interface FormState {
   message: string | null;
@@ -85,4 +87,33 @@ export async function importShipmentsAction(drafts: ShipmentDraft[]): Promise<Im
   const ids = await createShipments(session.companyId, clean);
   revalidatePath("/shipments");
   return { message: null, imported: ids.length };
+}
+
+export interface RequestEvidenceResult {
+  message: string | null;
+  /** 원문 토큰. DB에는 해시만 남으므로 이 응답에서만 볼 수 있다. */
+  token?: string;
+  expiresAt?: string;
+}
+
+/** 증빙 요청 1건 = 토큰 1개 (05-SECURITY 위협 1). */
+export async function requestEvidenceAction(
+  shipmentId: string,
+  kind: string,
+): Promise<RequestEvidenceResult> {
+  const session = await requireSession();
+
+  if (!isEvidenceKind(kind)) return { message: "증빙 종류를 골라 주세요." };
+
+  // 남의 운송 건이면 RLS가 걸러서 null이 온다. "없는 것"과 구분되지 않는다.
+  const shipment = await getShipment(session.companyId, shipmentId).catch(() => null);
+  if (!shipment) return { message: "운송 건을 찾을 수 없습니다." };
+
+  const issued = await createEvidenceRequest(session.companyId, shipmentId, kind);
+  revalidatePath(`/shipments/${shipmentId}`);
+  return {
+    message: null,
+    token: issued.token,
+    expiresAt: issued.expiresAt.toISOString(),
+  };
 }

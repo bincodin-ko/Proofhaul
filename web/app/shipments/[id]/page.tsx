@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CARGO_LABEL } from "@/lib/cargo";
+import { displayStatus, listEvidence, STATUS_LABEL } from "@/lib/evidence";
+import { KINDS } from "@/lib/evidence-kind";
 import { requireSession } from "@/lib/guard";
 import { getShipment } from "@/lib/shipments";
+import RequestEvidence from "./RequestEvidence";
 
 export const metadata = { title: "운송 건 — 운임근거함" };
 
@@ -21,6 +24,8 @@ export default async function ShipmentPage({
   // 그게 의도한 동작이다. "있는데 권한이 없다"를 알려주지 않는다.
   const shipment = await getShipment(session.companyId, id).catch(() => null);
   if (!shipment) notFound();
+
+  const evidence = await listEvidence(session.companyId, id);
 
   const rows: [string, string][] = [
     ["운송 일자", shipment.shipped_on],
@@ -56,17 +61,43 @@ export default async function ShipmentPage({
 
       <section className="card">
         <h2>증빙</h2>
-        {shipment.evidence_count === 0 ? (
+        {evidence.length === 0 ? (
           <p className="muted">아직 요청한 증빙이 없습니다.</p>
         ) : (
-          <p className="muted">{shipment.evidence_count}건</p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>종류</th>
+                  <th>상태</th>
+                  <th>서명자</th>
+                  <th>만료</th>
+                </tr>
+              </thead>
+              <tbody>
+                {evidence.map((row) => {
+                  const status = displayStatus(row);
+                  return (
+                    <tr key={row.id}>
+                      <td>{KINDS[row.kind]?.short ?? row.kind}</td>
+                      <td>
+                        <span className={`status ${status.toLowerCase()}`}>
+                          {STATUS_LABEL[status]}
+                        </span>
+                      </td>
+                      <td>{row.signer_name ?? "—"}</td>
+                      <td className="muted">
+                        {row.expires_at.toLocaleDateString("ko-KR")}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
-        <button type="button" className="primary" disabled>
-          증빙 요청
-        </button>
-        <p className="hint">
-          증빙 요청은 A4(토큰 링크와 서명)에서 붙습니다 — <code>docs/06-FAST-TRACK.md</code>
-        </p>
+
+        <RequestEvidence shipmentId={id} />
       </section>
     </main>
   );

@@ -3,7 +3,14 @@
 // 풀이 두 개다. 마이그레이션은 테이블 소유자로, 런타임은 RLS를 벗어날 수 없는
 // 제한된 역할로 붙는다. 런타임이 소유자로 붙으면 정책이 있어도 의미가 없다.
 
-import { Pool, type PoolClient, type QueryResultRow } from "pg";
+import { Pool, types, type PoolClient, type QueryResultRow } from "pg";
+
+// date(1082)를 Date 객체가 아니라 'YYYY-MM-DD' 문자열 그대로 받는다.
+//
+// 운송 일자는 한국 날짜다. 시각이 없는 값을 Date로 바꾸면 서버의 표준시가 끼어들어
+// 하루가 밀리고, 그러면 8월 1일 건이 7월 요율로 계산된다 — rules/index.ts가 막으려는
+// 바로 그 사고다. 문자열로 받으면 끼어들 자리가 없다.
+types.setTypeParser(types.builtins.DATE, (value) => value);
 
 function required(name: string): string {
   const value = process.env[name];

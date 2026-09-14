@@ -205,10 +205,14 @@ test("토큰 조회는 증빙 1건과 최소 정보만 돌려준다", async () =
   assert.equal(rows[0]!.company_name, "가나운수");
 
   // 서명 전 화면에 나가면 안 되는 것들이 응답에 없어야 한다 (05-SECURITY 위협 1).
+  //
+  // token_hash는 예외다. 앱에서 상수 시간 비교를 한 번 더 하려고 일부러 돌려준다.
+  // 부르는 쪽이 이미 들고 있는 토큰에서 나온 값이라 새로 알려주는 것이 없다.
   const keys = Object.keys(rows[0]!);
-  for (const leaked of ["driver_phone", "driver_name", "memo", "origin", "destination", "token_hash", "payload_json"]) {
+  for (const leaked of ["driver_phone", "driver_name", "memo", "origin", "destination", "payload_json"]) {
     assert.equal(keys.includes(leaked), false, `${leaked}가 서명 전 화면으로 새어 나간다`);
   }
+  assert.equal(keys.includes("token_hash"), true, "상수 시간 비교에 쓸 해시가 빠졌다");
 });
 
 test("토큰 문자열을 바꾸면 아무것도 열리지 않는다", async () => {

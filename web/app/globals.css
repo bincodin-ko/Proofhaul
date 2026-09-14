@@ -125,3 +125,64 @@ button.primary:disabled { background: #b9c2d0; }
 @media (max-width: 560px) {
   .grid { grid-template-columns: 1fr; }
 }
+
+/* ── 증빙 요청 ───────────────────────────────────────────────────────── */
+.request { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font: inherit; font-size: 14px; padding: 8px 13px; cursor: pointer;
+  background: #fff; color: var(--ink-2); border: 1px solid var(--line); border-radius: 999px;
+}
+.chip.on { background: #1f5fd0; border-color: #1f5fd0; color: #fff; font-weight: 600; }
+.label { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+
+.status { font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+.status.requested { background: #eef2fb; color: #1f4ea8; }
+.status.signed { background: #eef8f0; color: #24623a; }
+.status.expired { background: #f4f4f5; color: #6b7280; }
+
+.link-box { margin-top: 14px; padding: 14px; background: #f8fafc; border: 1px solid var(--line); border-radius: 10px; }
+.link-row { display: flex; gap: 8px; margin: 8px 0; }
+.link-row input { flex: 1; min-width: 0; font-size: 13px; font-family: ui-monospace, monospace; }
+.link-row button {
+  font: inherit; font-size: 14px; font-weight: 600; padding: 0 14px; cursor: pointer;
+  background: #fff; border: 1px solid var(--line); border-radius: 9px; white-space: nowrap;
+}
+
+/* ── 서명 화면 (로그인 없음, 모바일 우선) ─────────────────────────────── */
+main.sign {
+  max-width: 520px;
+  padding: 0 16px calc(96px + env(safe-area-inset-bottom, 0px));
+}
+.sign-head { padding: 22px 0 16px; }
+.sign-head .from { margin: 0; font-size: 13px; color: var(--ink-2); }
+.sign-head h1 { margin: 4px 0 6px; font-size: 21px; }
+.sign-head .about { margin: 0; font-size: 14px; color: var(--ink-2); }
+
+main.sign .card { padding: 16px; }
+main.sign .field { margin-bottom: 14px; }
+main.sign input, main.sign textarea { width: 100%; font-size: 16px; }
+
+.sign-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(8px);
+  border-top: 1px solid var(--line);
+}
+.sign-bar > * { max-width: 520px; margin-left: auto; margin-right: auto; }
+.hint.center { text-align: center; }
+
+.notice { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 28px 20px; margin-top: 40px; text-align: center; }
+.notice h1, .notice h2 { font-size: 19px; margin: 0 0 10px; }
+.notice p { margin: 0; font-size: 14.5px; }
+.ok-notice { border-color: #bfe2c8; background: #f7fcf8; }
+
+.unsupported { background: #fff8e6; border: 1px solid #f0dba8; border-radius: 10px; padding: 12px 14px; margin-top: 14px; }
+.unsupported .u-t { font-size: 13.5px; font-weight: 700; color: #7a5a10; }
+.unsupported .u-d { font-size: 12.5px; color: #7a5a10; margin-top: 3px; opacity: 0.9; }
+
+.sig { position: relative; margin-top: 6px; }
+.sig-canvas { display: block; width: 100%; touch-action: none; background: #fff; border: 1px dashed #c3c9d2; border-radius: 10px; }
+.sig-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; margin: 0; pointer-events: none; color: #8b929c; font-size: 14px; }
+.sig-clear { margin-top: 8px; font: inherit; font-size: 13.5px; padding: 7px 12px; cursor: pointer; background: #fff; color: var(--ink-2); border: 1px solid var(--line); border-radius: 8px; }
+.sig-clear:disabled { opacity: 0.45; cursor: default; }

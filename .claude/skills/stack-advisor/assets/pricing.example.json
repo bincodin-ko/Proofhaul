@@ -1,0 +1,128 @@
+{
+  "_note": "예시 값. 전부 학습 시점 기억값이므로 검색으로 확인한 숫자로 덮어쓰고 source에 URL과 날짜를 적는다. 금액은 USD/월.",
+  "options": {
+    "hetzner-cx22": {
+      "layer": "hosting", "label": "Hetzner CX22 (EU)",
+      "fixed_monthly": 4.2,
+      "metered": {"egress_gb": {"included": 20000, "per_unit": 0.0012}},
+      "ops_hours_per_month": 3,
+      "free_tier_commercial": true, "spend_cap": true,
+      "note": "서울 리전 없음. 한국 사용자면 지연 확인", "source": ""
+    },
+    "vultr-seoul-2gb": {
+      "layer": "hosting", "label": "Vultr 서울 2GB",
+      "fixed_monthly": 12,
+      "metered": {"egress_gb": {"included": 2000, "per_unit": 0.01}},
+      "ops_hours_per_month": 3,
+      "free_tier_commercial": true, "spend_cap": true,
+      "note": "", "source": ""
+    },
+    "vercel-pro": {
+      "layer": "hosting", "label": "Vercel Pro (1좌석)",
+      "fixed_monthly": 20,
+      "metered": {
+        "egress_gb": {"included": 1000, "per_unit": 0.15},
+        "image_transforms_k": {"included": 5, "per_unit": 0.05}
+      },
+      "ops_hours_per_month": 0.5,
+      "free_tier_commercial": false, "spend_cap": true,
+      "note": "Hobby는 비상업. 함수 실행시간 별도", "source": ""
+    },
+    "cloudflare-workers-paid": {
+      "layer": "hosting", "label": "Cloudflare Workers Paid",
+      "fixed_monthly": 5,
+      "metered": {"requests_m": {"included": 10, "per_unit": 0.30}},
+      "ops_hours_per_month": 0.5,
+      "free_tier_commercial": true, "spend_cap": false,
+      "note": "egress 0. Node 호환성 확인", "source": ""
+    },
+    "coolify-postgres": {
+      "layer": "database", "label": "같은 VPS의 Postgres (Coolify)",
+      "fixed_monthly": 0,
+      "ops_hours_per_month": 1,
+      "free_tier_commercial": true, "spend_cap": true,
+      "note": "백업을 R2/B2로. 운영 시간에 백업 확인 포함", "source": ""
+    },
+    "supabase-pro": {
+      "layer": "database", "label": "Supabase Pro",
+      "fixed_monthly": 25,
+      "metered": {
+        "db_gb": {"included": 8, "per_unit": 0.125},
+        "egress_gb": {"included": 250, "per_unit": 0.09},
+        "storage_gb": {"included": 100, "per_unit": 0.021}
+      },
+      "ops_hours_per_month": 0.3,
+      "free_tier_commercial": true, "spend_cap": true,
+      "note": "인증·스토리지 포함. 서울 리전 확인", "source": ""
+    },
+    "neon-launch": {
+      "layer": "database", "label": "Neon Launch",
+      "fixed_monthly": 19,
+      "ops_hours_per_month": 0.3,
+      "free_tier_commercial": true, "spend_cap": true,
+      "note": "서울 없음", "source": ""
+    },
+    "cloudflare-r2": {
+      "layer": "storage", "label": "Cloudflare R2",
+      "fixed_monthly": 0,
+      "metered": {"storage_gb": {"included": 10, "per_unit": 0.015}},
+      "ops_hours_per_month": 0.2,
+      "free_tier_commercial": true, "spend_cap": false,
+      "note": "egress 0", "source": ""
+    },
+    "aws-s3-seoul": {
+      "layer": "storage", "label": "AWS S3 서울",
+      "fixed_monthly": 0,
+      "metered": {
+        "storage_gb": {"included": 0, "per_unit": 0.025},
+        "egress_gb": {"included": 100, "per_unit": 0.126}
+      },
+      "ops_hours_per_month": 0.3,
+      "free_tier_commercial": true, "spend_cap": false,
+      "note": "egress 과금", "source": ""
+    },
+    "self-auth": {
+      "layer": "auth", "label": "자체 인증 라이브러리 (Better Auth 등)",
+      "fixed_monthly": 0, "ops_hours_per_month": 0.2,
+      "free_tier_commercial": true, "spend_cap": true,
+      "note": "카카오·네이버 provider 확인", "source": ""
+    },
+    "clerk": {
+      "layer": "auth", "label": "Clerk",
+      "fixed_monthly": 0,
+      "tiers": {"mau": [{"up_to": 10000, "fixed": 0}, {"up_to": null, "fixed": 25}]},
+      "metered": {"mau": {"included": 10000, "per_unit": 0.02}},
+      "ops_hours_per_month": 0.1,
+      "free_tier_commercial": true, "spend_cap": false,
+      "note": "MAU 절벽", "source": ""
+    },
+    "resend": {
+      "layer": "email", "label": "Resend",
+      "fixed_monthly": 0,
+      "tiers": {"emails": [{"up_to": 3000, "fixed": 0}, {"up_to": 50000, "fixed": 20}, {"up_to": null, "fixed": 90}]},
+      "ops_hours_per_month": 0.1,
+      "free_tier_commercial": true, "spend_cap": true,
+      "note": "", "source": ""
+    },
+    "kakao-alimtalk": {
+      "layer": "notification", "label": "알림톡 (대행사)",
+      "fixed_monthly": 0,
+      "metered": {"alimtalk_msgs": {"included": 0, "per_unit": 0.007}},
+      "ops_hours_per_month": 0.2,
+      "free_tier_commercial": true, "spend_cap": true,
+      "note": "건당 원화 단가를 USD로 환산해 넣을 것", "source": ""
+    },
+    "sentry-free": {
+      "layer": "monitoring", "label": "Sentry Free + UptimeRobot",
+      "fixed_monthly": 0, "ops_hours_per_month": 0.2,
+      "free_tier_commercial": true, "spend_cap": true,
+      "note": "", "source": ""
+    },
+    "cloudflare-front": {
+      "layer": "cdn", "label": "Cloudflare Free (DNS/CDN)",
+      "fixed_monthly": 0, "ops_hours_per_month": 0.1,
+      "free_tier_commercial": true, "spend_cap": true,
+      "note": "", "source": ""
+    }
+  }
+}

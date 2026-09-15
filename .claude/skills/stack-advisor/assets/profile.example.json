@@ -1,0 +1,9 @@
+{
+  "hourly_rate_krw": 30000,
+  "fx_krw_per_usd": 1400,
+  "scale_points": [
+    {"name": "출시 직후", "usage": {"requests_m": 0.05, "egress_gb": 5, "storage_gb": 2, "db_gb": 0.2, "mau": 30, "emails": 300, "alimtalk_msgs": 200, "image_transforms_k": 1}},
+    {"name": "고객 100명", "usage": {"requests_m": 1.5, "egress_gb": 120, "storage_gb": 60, "db_gb": 3, "mau": 800, "emails": 6000, "alimtalk_msgs": 4000, "image_transforms_k": 20}},
+    {"name": "고객 1,000명", "usage": {"requests_m": 15, "egress_gb": 1400, "storage_gb": 600, "db_gb": 25, "mau": 8000, "emails": 60000, "alimtalk_msgs": 40000, "image_transforms_k": 200}}
+  ]
+}

@@ -35,6 +35,9 @@ pricing.json — 옵션별 단가. 조사한 값으로 채운다. 모든 금액�
   }
 
 metered 규칙: 사용량이 included를 넘는 만큼 per_unit을 곱한다.
+ops_hours_per_month 규칙: 그 옵션이 **추가로** 만드는 한계 시간만 적는다. 같은 박스에 올린
+Postgres는 VPS의 패치·백업 시간과 겹치므로 VPS 3h + DB 1.5h가 아니라 VPS 3h + DB 0.5h다.
+이중계상하면 셀프호스트가 실제보다 비싸 보여 결론이 뒤집힌다.
 계단식 요금(예: MAU 1만 초과 시 플랜 점프)은 "tiers": [{"up_to": 10000, "fixed": 0}, {"up_to": null, "fixed": 25}] 로 적는다.
 """
 import argparse
@@ -116,6 +119,16 @@ def main():
         })
 
     warnings = []
+    total_hours = sum(float(pricing[i].get("ops_hours_per_month", 0)) for i in ids)
+    heavy = [pricing[i].get("label", i) for i in ids
+             if float(pricing[i].get("ops_hours_per_month", 0)) >= 1]
+    if len(heavy) > 1:
+        warnings.append(
+            "운영 시간 이중계상 의심 — 1시간 이상인 옵션이 여럿입니다 (" + ", ".join(heavy) + "). "
+            "같은 서버에 올라가는 것들이면 한계 시간만 남기고 줄이십시오.")
+    if total_hours > 8:
+        warnings.append(f"월 운영 시간 합계 {total_hours:.1f}h — 1인이 감당하기 어렵습니다. "
+                        "관리형으로 옮길 층이 있는지 보십시오.")
     for i in ids:
         opt = pricing[i]
         if opt.get("free_tier_commercial") is False and opt.get("fixed_monthly", 0) == 0:

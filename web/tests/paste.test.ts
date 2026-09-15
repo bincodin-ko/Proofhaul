@@ -32,6 +32,42 @@ test("엑셀이 넣어주는 형식 그대로 격자로 자른다", () => {
   assert.equal(grid[3]![7], "게이트 대기,\n야간 하차");
 });
 
+// 아래는 LibreOffice Calc(리눅스)가 실제로 클립보드에 올린 text/plain을 그대로
+// 옮긴 것이다. 위의 EXCEL_PASTE와 두 군데가 다르다.
+//
+//  - 줄 구분이 LF다 (윈도우 엑셀은 CRLF)
+//  - 셀 안의 줄바꿈을 큰따옴표로 감싸지 않고 **공백으로 펴서** 내보낸다
+//
+// 앱마다 다르므로 둘 다 통과해야 한다. 큰따옴표로 감싸는 쪽(윈도우 엑셀,
+// 구글 시트)은 EXCEL_PASTE가, 펴서 내보내는 쪽은 이쪽이 지킨다.
+const CALC_PASTE =
+  "운송일자\t품목\t출발지\t도착지\t차주\t연락처\t화주\t비고\n" +
+  "2026-08-14\t40FT\t부산 신항 2부두\t경남 양산시 물금읍\t김철수\t010-1234-5678\t평택항 제일물류센터\t오전 상차\n" +
+  "2026-08-15\t20ft\t인천 남항\t충북 음성군 대소면\t박영수\t01098765432\t한빛로지스\t\n" +
+  "2026.08.16\t시멘트\t단양공장\t충주 현장\t이순신\t010-2222-3333\t대한시멘트\t게이트 대기, 야간 하차\n" +
+  "2026-08-17\t냉동탑차\t광주\t목포\t최무선\t010-4444-5555\t남도유통\t품목 못 읽는 줄\n" +
+  "8/18\t40FT\t평택\t천안\t강감찬\t010-6666-7777\t삼한물류\t연도 없는 날짜\n";
+
+test("LF로 끊고 따옴표를 안 쓰는 앱(LibreOffice Calc)의 클립보드도 읽는다", () => {
+  const parsed = parsePaste(CALC_PASTE);
+  assert.equal(parsed.looksLikeHeader, true);
+  assert.deepEqual(parsed.mapping, [
+    "shipped_on", "cargo_type", "origin", "destination",
+    "driver_name", "driver_phone", "shipper_name", "memo",
+  ]);
+
+  const results = toDrafts(parsed.rows, parsed.mapping, parsed.looksLikeHeader);
+  const good = results.filter((r) => r.draft);
+  const bad = results.filter((r) => !r.draft && r.errors.length > 0);
+
+  // 결과는 CRLF·따옴표 쓰는 앱과 같아야 한다 — 3건 저장, 2줄 거부.
+  assert.equal(good.length, 3);
+  assert.equal(bad.length, 2);
+  assert.deepEqual(good.map((r) => r.draft!.shipped_on), ["2026-08-14", "2026-08-15", "2026-08-16"]);
+  assert.equal(good[1]!.draft!.driver_phone, "010-9876-5432");
+  assert.equal(good[2]!.draft!.memo, "게이트 대기, 야간 하차");
+});
+
 test("셀 안의 큰따옴표는 둘로 겹쳐서 온다", () => {
   const grid = parseGrid('a\t"그가 ""왔다"" 함"\r\n');
   assert.deepEqual(grid, [["a", '그가 "왔다" 함']]);

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { isCargoType } from "@/lib/cargo";
 import { requireSession } from "@/lib/guard";
-import { MAX_ROWS, parseShippedOn, type ShipmentDraft } from "@/lib/paste";
+import { MAX_ROWS, normalizePhone, parseShippedOn, type ShipmentDraft } from "@/lib/paste";
 import { createEvidenceRequest } from "@/lib/evidence";
 import { isEvidenceKind } from "@/lib/evidence-kind";
 import { createShipment, createShipments, getShipment } from "@/lib/shipments";
@@ -33,7 +33,9 @@ export async function createShipmentAction(
     origin: get("origin"),
     destination: get("destination"),
     driver_name: get("driver_name"),
-    driver_phone: get("driver_phone"),
+    // 붙여넣기와 같은 규칙으로 정리한다. 같은 번호가 경로에 따라 다른 모양으로
+    // 저장되면 나중에 차주별로 묶을 때 갈라진다.
+    driver_phone: normalizePhone(get("driver_phone")),
     shipper_name: get("shipper_name"),
     memo: get("memo"),
   };

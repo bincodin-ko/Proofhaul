@@ -84,6 +84,22 @@ npm run dev      # http://localhost:3000
 npm run build && npm start
 ```
 
+## 검증
+
+```
+npm run build && npm start &   # http://localhost:3311 로 띄운 뒤
+npm run e2e
+```
+
+`tests/e2e/run.mjs`가 명령 0의 요구사항을 실제로 돌려서 확인한다. 만든 PDF는
+`.e2e-out/`에 남으므로 열어서 한글을 눈으로 볼 수 있다.
+
+**"개인정보를 서버로 보내지 않는다"는 화면만 봐서는 확인할 수 없다.** 그래서
+흐름 내내 나가는 요청을 전부 붙잡아 입력값이 섞여 나가는지 본다. 카운터는
+`navigator.sendBeacon(Blob)`으로 나가는데 Playwright의 `request.postData()`는
+Blob 본문에 `null`을 주기 때문에, 그것만 믿으면 **본문을 읽지도 않고** 통과시키게
+된다. CDP의 `Network.getRequestPostData`로 본문을 실제로 받아와서 검사한다.
+
 ## 배포 (Vercel 무료 티어)
 
 이 폴더가 프로젝트 루트다. 저장소 루트가 아니다.

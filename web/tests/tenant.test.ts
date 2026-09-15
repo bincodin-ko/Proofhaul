@@ -96,6 +96,26 @@ test("모든 id가 UUID다 (자동증가 정수가 아니다)", async () => {
   assert.match(A.evidenceId, UUID_RE);
 });
 
+test("어느 테이블도 자동증가 정수 id를 쓰지 않는다", async () => {
+  // "모든 id는 UUID. 자동증가 정수 금지" (06-FAST-TRACK A1, 03-BUILD-PROMPT 명령 3).
+  // 새 테이블을 만들 때 bigserial을 쓰면 여기서 걸린다. 점검에서 실제로 두 개를
+  // 놓쳤던 자리라 검사로 박아둔다.
+  const { rows } = await owner.query<{ table_name: string; data_type: string; column_default: string | null }>(
+    `SELECT table_name, data_type, column_default FROM information_schema.columns
+     WHERE table_schema = 'public' AND column_name = 'id' AND table_name <> 'schema_migrations'
+     ORDER BY table_name`,
+  );
+  assert.ok(rows.length >= 8, `id 칼럼이 있는 테이블이 ${rows.length}개뿐이다`);
+  for (const row of rows) {
+    assert.equal(row.data_type, "uuid", `${row.table_name}.id 가 uuid가 아니다`);
+    assert.equal(
+      row.column_default?.startsWith("nextval") ?? false,
+      false,
+      `${row.table_name}.id 가 자동증가다`,
+    );
+  }
+});
+
 test("다섯 테이블 모두 RLS가 켜져 있고 소유자에게도 강제된다", async () => {
   const { rows } = await owner.query<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>(
     `SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class

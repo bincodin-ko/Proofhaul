@@ -1,0 +1,22 @@
+{
+  "_note": "Proofhaul. 고객=화주사. 화주사당 월 배송건 500건 가정. 건당 사진2장+서명+PDF ≈ 1MB 저장, 열람 3회.",
+  "hourly_rate_krw": 30000,
+  "fx_krw_per_usd": 1400,
+  "scale_points": [
+    {"name": "출시 직후 (화주 3사·월 1.5천건)", "usage": {
+      "storage_gb": 5, "egress_gb": 10, "jobs_k": 1.5, "llm_calls_k": 1.5,
+      "alimtalk_msgs": 1500, "emails": 300, "class_a_ops_m": 0.005, "class_b_ops_m": 0.014,
+      "db_gb": 0.3, "mau": 40, "image_transforms_k": 3
+    }},
+    {"name": "고객 100명 (월 5만건)", "usage": {
+      "storage_gb": 300, "egress_gb": 400, "jobs_k": 50, "llm_calls_k": 50,
+      "alimtalk_msgs": 50000, "emails": 6000, "class_a_ops_m": 0.15, "class_b_ops_m": 0.45,
+      "db_gb": 6, "mau": 1200, "image_transforms_k": 100
+    }},
+    {"name": "고객 1,000명 (월 50만건)", "usage": {
+      "storage_gb": 3000, "egress_gb": 4000, "jobs_k": 500, "llm_calls_k": 500,
+      "alimtalk_msgs": 500000, "emails": 60000, "class_a_ops_m": 1.5, "class_b_ops_m": 4.5,
+      "db_gb": 50, "mau": 12000, "image_transforms_k": 1000
+    }}
+  ]
+}

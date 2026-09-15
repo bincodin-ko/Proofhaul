@@ -1,0 +1,241 @@
+{
+  "_note": "2026-09-15 웹검색 확인값. 출처는 docs/stack-recommendation.md 참조.",
+  "options": {
+    "vultr-seoul": {
+      "layer": "hosting",
+      "label": "Vultr 서울 VPS (단계 상향)",
+      "fixed_monthly": 0,
+      "tiers": {
+        "jobs_k": [
+          {
+            "up_to": 5,
+            "fixed": 12
+          },
+          {
+            "up_to": 100,
+            "fixed": 48
+          },
+          {
+            "up_to": null,
+            "fixed": 144
+          }
+        ]
+      },
+      "metered": {
+        "egress_gb": {
+          "included": 2000,
+          "per_unit": 0.01
+        }
+      },
+      "ops_hours_per_month": 3,
+      "free_tier_commercial": true,
+      "spend_cap": true,
+      "note": "서울 리전. $10/2TB부터, 처리량 늘면 상향. 파일은 R2라 VPS 대역폭 소모 적음",
+      "source": "https://www.vultr.com/products/cloud-compute/ (2026-09-15)"
+    },
+    "lightsail-seoul": {
+      "layer": "hosting",
+      "label": "AWS Lightsail 서울 (단계 상향)",
+      "fixed_monthly": 0,
+      "tiers": {
+        "jobs_k": [
+          {
+            "up_to": 5,
+            "fixed": 12
+          },
+          {
+            "up_to": 100,
+            "fixed": 44
+          },
+          {
+            "up_to": null,
+            "fixed": 160
+          }
+        ]
+      },
+      "metered": {
+        "egress_gb": {
+          "included": 3000,
+          "per_unit": 0.13
+        }
+      },
+      "ops_hours_per_month": 3,
+      "free_tier_commercial": true,
+      "spend_cap": false,
+      "note": "서울 ap-northeast-2. 초과 전송 $0.13/GB로 비쌈",
+      "source": "https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-faq-data-transfer-allowance.html (2026-09-15)"
+    },
+    "vercel-pro": {
+      "layer": "hosting",
+      "label": "Vercel Pro (1좌석)",
+      "fixed_monthly": 20,
+      "metered": {
+        "egress_gb": {
+          "included": 1000,
+          "per_unit": 0.15
+        },
+        "image_transforms_k": {
+          "included": 5,
+          "per_unit": 0.0812
+        }
+      },
+      "ops_hours_per_month": 0.5,
+      "free_tier_commercial": false,
+      "spend_cap": true,
+      "note": "Hobby는 상업 사용 금지. $20에 $20 크레딧 포함. 함수 실행시간 별도 과금 — 아래 표에 미반영(실제로는 더 비쌈)",
+      "source": "https://flexprice.io/blog/vercel-pricing-breakdown (2026-09-15)"
+    },
+    "coolify-postgres": {
+      "layer": "database",
+      "label": "같은 VPS의 Postgres (Coolify)",
+      "fixed_monthly": 0,
+      "ops_hours_per_month": 0.5,
+      "free_tier_commercial": true,
+      "spend_cap": true,
+      "note": "Coolify 내장 S3 백업으로 R2에 일일 덤프. 2026-01 취약점 11건 공개 — 자동 업데이트 필수",
+      "source": "https://devopsboys.com/blog/coolify-self-hosted-heroku-alternative-review-2026 (2026-09-15)"
+    },
+    "supabase-pro": {
+      "layer": "database",
+      "label": "Supabase Pro (서울)",
+      "fixed_monthly": 25,
+      "metered": {
+        "db_gb": {
+          "included": 8,
+          "per_unit": 0.125
+        },
+        "egress_gb": {
+          "included": 250,
+          "per_unit": 0.09
+        }
+      },
+      "ops_hours_per_month": 0.3,
+      "free_tier_commercial": true,
+      "spend_cap": true,
+      "note": "250GB 통합 egress 쿼터(DB+스토리지+Auth+API 합산). 인증 포함",
+      "source": "https://flexprice.io/blog/supabase-pricing-breakdown (2026-09-15)"
+    },
+    "cloudflare-r2": {
+      "layer": "storage",
+      "label": "Cloudflare R2 (egress $0)",
+      "fixed_monthly": 0,
+      "metered": {
+        "storage_gb": {
+          "included": 10,
+          "per_unit": 0.015
+        },
+        "class_a_ops_m": {
+          "included": 1,
+          "per_unit": 4.5
+        },
+        "class_b_ops_m": {
+          "included": 10,
+          "per_unit": 0.36
+        }
+      },
+      "ops_hours_per_month": 0.2,
+      "free_tier_commercial": true,
+      "spend_cap": false,
+      "note": "egress 무료가 이 서비스의 핵심. 무료 10GB/월 + Class A 100만 + Class B 1000만",
+      "source": "https://egresscost.com/cloudflare/ (2026-09-15)"
+    },
+    "s3-seoul": {
+      "layer": "storage",
+      "label": "AWS S3 서울 (비교용)",
+      "fixed_monthly": 0,
+      "metered": {
+        "storage_gb": {
+          "included": 0,
+          "per_unit": 0.025
+        },
+        "egress_gb": {
+          "included": 100,
+          "per_unit": 0.126
+        }
+      },
+      "ops_hours_per_month": 0.3,
+      "free_tier_commercial": true,
+      "spend_cap": false,
+      "note": "egress 과금 — 이 프로필에서 치명적",
+      "source": "https://aws.amazon.com/s3/pricing/ (2026-09-15, 개략)"
+    },
+    "self-auth": {
+      "layer": "auth",
+      "label": "자체 인증 (Better Auth + 카카오)",
+      "fixed_monthly": 0,
+      "ops_hours_per_month": 0.2,
+      "free_tier_commercial": true,
+      "spend_cap": true,
+      "note": "MAU 과금 없음. 기사 계정이 무료로 많이 생기는 구조라 MAU 과금 인증은 부적합",
+      "source": "-"
+    },
+    "llm-haiku-batch": {
+      "layer": "llm",
+      "label": "Claude Haiku 4.5 (배치 50% 할인)",
+      "fixed_monthly": 0,
+      "metered": {
+        "llm_calls_k": {
+          "included": 0,
+          "per_unit": 1.5
+        }
+      },
+      "ops_hours_per_month": 0.1,
+      "free_tier_commercial": true,
+      "spend_cap": false,
+      "note": "건당 입력 2K + 출력 200토큰 가정, 배치 API 50% 적용. $1/$5 per MTok",
+      "source": "claude-api 스킬 모델 표 (2026-06-24 캐시)"
+    },
+    "alimtalk": {
+      "layer": "notification",
+      "label": "알림톡 (공식딜러사)",
+      "fixed_monthly": 0,
+      "metered": {
+        "alimtalk_msgs": {
+          "included": 0,
+          "per_unit": 0.0071
+        }
+      },
+      "ops_hours_per_month": 0.2,
+      "free_tier_commercial": true,
+      "spend_cap": true,
+      "note": "건당 10원 기준. 월 10만건 넘으면 8원으로 하락",
+      "source": "https://blog.bizgo.io/inside/alimtalk-provider-selection-guide/ , https://solapi.com/guides/tiered-pricing/ (2026-09-15)"
+    },
+    "resend": {
+      "layer": "email",
+      "label": "Resend",
+      "fixed_monthly": 0,
+      "tiers": {
+        "emails": [
+          {
+            "up_to": 3000,
+            "fixed": 0
+          },
+          {
+            "up_to": 50000,
+            "fixed": 20
+          },
+          {
+            "up_to": null,
+            "fixed": 90
+          }
+        ]
+      },
+      "ops_hours_per_month": 0.1,
+      "free_tier_commercial": true,
+      "spend_cap": true,
+      "note": "",
+      "source": "https://resend.com/pricing (2026-09-15, 개략)"
+    },
+    "monitoring": {
+      "layer": "monitoring",
+      "label": "Sentry Free + UptimeRobot + Cloudflare Free",
+      "fixed_monthly": 0,
+      "ops_hours_per_month": 0.3,
+      "free_tier_commercial": true,
+      "spend_cap": true,
+      "note": "",
+      "source": "-"
+    }
+  }
+}

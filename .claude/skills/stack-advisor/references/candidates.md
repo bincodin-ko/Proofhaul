@@ -56,9 +56,9 @@ AWS ECS/EKS, GCP GKE, Cloud Run 이외의 GCP 조합, 멀티리전, Kubernetes �
 | 후보 | 출발 가격 | 메모 |
 |---|---|---|
 | Supabase (Postgres) | 무료 500MB → Pro $25/월 | 인증·스토리지·풀러 포함, 부품 수를 줄여준다. 🇰🇷 서울 리전 있음(확인). ⚠️ 무료는 미사용 시 일시정지, Pro 초과분 egress 과금 |
-| Neon (Postgres) | 무료 → Launch $19/월 | serverless, 브랜칭, scale-to-zero. 🇰🇷 서울 없음 — 싱가포르 계열(확인). ⚠️ 콜드 스타트 |
+| Neon (Postgres) | 무료 → 사용량 기반 (2025 Databricks 인수 후 인하, 월 최소 요금 폐지) | serverless, 브랜칭, scale-to-zero. 🇰🇷 **서울·도쿄 모두 없음** — 아시아는 싱가포르·시드니. 한국 사용자면 이것만으로 탈락하는 경우가 많다. ⚠️ 콜드 스타트 300~800ms |
 | 같은 VPS의 Postgres (Coolify) | 추가 비용 0 | ⚠️ 백업·업그레이드·디스크는 내 시간. 매일 덤프를 R2/B2로 |
-| Turso (libSQL) / Cloudflare D1 (SQLite) | 무료 넉넉 → $5~ | 읽기 위주·엣지에 적합. ⚠️ 복잡한 트랜잭션·대용량 쓰기엔 부적합 |
+| Turso (libSQL) / Cloudflare D1 (SQLite) | 무료 → $5~ | 읽기 위주·엣지에 적합. ⚠️ D1은 2026-09-01부터 무료 일일 row 한도 초과 시 **쿼리가 에러로 실패**한다 — 요금이 아니라 서비스가 조용히 깨지는 유형. ⚠️ 복잡한 트랜잭션·대용량 쓰기엔 부적합 |
 | MongoDB Atlas | M0 무료 512MB → $9~ | 🇰🇷 서울(AWS) 가능. 문서형이 정말 맞을 때만 |
 | PlanetScale | 유료만(확인) | ⚠️ 2024 무료 폐지 이력 |
 | Firebase/Firestore | 무료 → 읽기·쓰기 건당 | ⚠️ 목록 화면 하나가 읽기 수천 건. 요금 예측 어려움 |
@@ -79,7 +79,7 @@ AWS ECS/EKS, GCP GKE, Cloud Run 이외의 GCP 조합, 멀티리전, Kubernetes �
 
 | 후보 | 출발 가격 | 메모 |
 |---|---|---|
-| Supabase Auth | Pro에 포함(MAU 넉넉) | 🇰🇷 카카오 provider 지원(확인), 네이버는 커스텀 OIDC 필요할 수 있음 |
+| Supabase Auth | Pro에 포함(MAU 넉넉) | 🇰🇷 카카오 provider 공식 지원, **네이버는 공식 provider 없음** — 커스텀 OIDC를 직접 붙여야 한다. ⚠️ B2B면 SAML SSO가 Pro 미포함(Team 또는 애드온)이라 나중에 비용 절벽이 온다 |
 | Better Auth / Auth.js / Lucia 계열 (자체 라이브러리) | 0 | 사용자 테이블이 내 DB에. 🇰🇷 카카오·네이버 provider 유무 확인 |
 | Clerk | 무료 MAU 한도 → $25/월 + MAU당 | UI 완성도 높음. ⚠️ MAU 절벽, 사용자 데이터 락인 |
 | Auth0 | 무료 → 급등 | ⚠️ 이 규모에서 후보 아님 |

@@ -65,7 +65,7 @@ cdp.on("Network.requestWillBeSent", ({ requestId, request }) => {
 });
 
 async function sign() {
-  const box = await page.locator("canvas.sig-canvas").boundingBox();
+  const box = await page.locator("canvas.sign-pad").boundingBox();
   await page.mouse.move(box.x + 30, box.y + box.height * 0.65);
   await page.mouse.down();
   for (let i = 0; i <= 50; i++) {
@@ -119,7 +119,7 @@ ok("가로 스크롤이 없다",
 await page.fill("#f-timeNote", "株式會社 로 표기된 서류");
 await page.getByRole("button", { name: "서명 받기" }).click();
 await page.waitForTimeout(300);
-const guard = await page.locator(".bar .error").textContent().catch(() => null);
+const guard = await page.locator(".sign-actionbar .why").textContent().catch(() => null);
 ok("폰트에 없는 한자를 서명 전에 막는다",
    Boolean(guard) && guard.includes("넣을 수 없는 글자") && guard.includes("株"), guard);
 ok("막힌 상태에서 서명 단계로 넘어가지 않는다", (await page.locator("#signer-name").count()) === 0);

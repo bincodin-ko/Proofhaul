@@ -11,6 +11,7 @@ interface Props {
 /** 모든 값은 문자열로 다룬다. 다중 선택은 ", "로 이어 붙인다. */
 export default function FieldInput({ field, value, onChange }: Props) {
   const id = `f-${field.key}`;
+  const wide = field.wide ? "span-2" : "";
 
   if (field.type === "checks" || field.type === "radio") {
     const selected = value ? value.split(", ").filter(Boolean) : [];
@@ -23,14 +24,20 @@ export default function FieldInput({ field, value, onChange }: Props) {
       onChange(next.join(", "));
     };
     return (
-      <div className={`field ${field.wide ? "wide" : ""}`}>
-        <span className="label">{field.label}</span>
-        <div className="chips" role={multi ? "group" : "radiogroup"} aria-label={field.label}>
+      <div className={`sign-field ${wide}`}>
+        <label>{field.label}</label>
+        <div
+          className="od-cluster"
+          style={{ ["--od-gap" as string]: "8px" }}
+          role={multi ? "group" : "radiogroup"}
+          aria-label={field.label}
+        >
           {(field.options ?? []).map((option) => (
             <button
               key={option}
               type="button"
-              className={`chip ${selected.includes(option) ? "on" : ""}`}
+              className={`btn od-touch ${selected.includes(option) ? "btn-primary" : ""}`}
+              style={{ minHeight: 46, fontSize: 16 }}
               aria-pressed={selected.includes(option)}
               onClick={() => toggle(option)}
             >
@@ -43,33 +50,28 @@ export default function FieldInput({ field, value, onChange }: Props) {
     );
   }
 
-  if (field.type === "textarea") {
-    return (
-      <div className={`field ${field.wide ? "wide" : ""}`}>
-        <label className="label" htmlFor={id}>{field.label}</label>
+  return (
+    <div className={`sign-field ${wide}`}>
+      <label htmlFor={id}>{field.label}</label>
+      {field.type === "textarea" ? (
         <textarea
           id={id}
-          rows={3}
+          rows={2}
           value={value}
           placeholder={field.placeholder}
           onChange={(e) => onChange(e.target.value)}
         />
-        {field.hint && <span className="hint">{field.hint}</span>}
-      </div>
-    );
-  }
-
-  return (
-    <div className={`field ${field.wide ? "wide" : ""}`}>
-      <label className="label" htmlFor={id}>{field.label}</label>
-      <input
-        id={id}
-        type={field.type}
-        value={value}
-        placeholder={field.placeholder}
-        inputMode={field.type === "tel" ? "tel" : undefined}
-        onChange={(e) => onChange(e.target.value)}
-      />
+      ) : (
+        <input
+          id={id}
+          type={field.type}
+          step={field.type === "time" ? 300 : undefined}
+          value={value}
+          placeholder={field.placeholder}
+          inputMode={field.type === "tel" ? "tel" : undefined}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
       {field.hint && <span className="hint">{field.hint}</span>}
     </div>
   );

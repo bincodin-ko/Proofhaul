@@ -4,19 +4,14 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { CARGO_LABEL } from "@/lib/cargo";
 import {
-  FIELDS,
-  FIELD_LABEL,
-  MAX_ROWS,
-  parsePaste,
-  toDrafts,
-  type Field,
-  type ParsedGrid,
-  type ShipmentDraft,
+  FIELDS, FIELD_LABEL, MAX_ROWS, parsePaste, toDrafts,
+  type Field, type ParsedGrid, type ShipmentDraft,
 } from "@/lib/paste";
 import { importShipmentsAction } from "../actions";
 
 const PREVIEW_ROWS = 30;
 
+/** 읽힌 줄은 저장될 값을, 못 읽은 줄은 원본 글자를 보여준다. */
 function cellText(field: Field | null, draft: ShipmentDraft | null, raw: string): string {
   if (!field || !draft) return raw;
   if (field === "cargo_type") return CARGO_LABEL[draft.cargo_type];
@@ -35,10 +30,7 @@ export default function PasteImport() {
   function handleText(next: string) {
     setText(next);
     setError(null);
-    if (!next.trim()) {
-      setParsed(null);
-      return;
-    }
+    if (!next.trim()) return setParsed(null);
     try {
       const result = parsePaste(next);
       setParsed(result);
@@ -54,14 +46,12 @@ export default function PasteImport() {
     () => (parsed ? toDrafts(parsed.rows, mapping, hasHeader) : []),
     [parsed, mapping, hasHeader],
   );
-
   const ready = results.filter((r) => r.draft !== null);
   const failed = results.filter((r) => r.draft === null && r.errors.length > 0);
 
   function setColumn(index: number, field: Field | null) {
     setMapping((current) => {
       const next = [...current];
-      // 같은 필드를 두 칼럼에 둘 수 없다. 먼저 있던 쪽을 비운다.
       if (field) next.forEach((f, i) => { if (f === field && i !== index) next[i] = null; });
       next[index] = field;
       return next;
@@ -79,51 +69,66 @@ export default function PasteImport() {
   }
 
   const header = parsed && hasHeader ? parsed.rows[0] : null;
-  const preview = results.slice(0, PREVIEW_ROWS);
 
   return (
     <div className="card">
-      <div className="field">
-        <label htmlFor="paste">엑셀에서 범위를 복사해 붙여넣으세요</label>
-        <textarea
-          id="paste"
-          rows={6}
-          value={text}
-          placeholder={"운송일자\t품목\t출발지\t도착지\t차주\t연락처\t화주"}
-          onChange={(e) => handleText(e.target.value)}
-        />
-        <span className="hint">
-          첫 줄을 제목 줄로 짐작합니다. 틀리면 아래에서 고칠 수 있습니다. 한 번에 {MAX_ROWS}건까지.
-        </span>
-      </div>
+      <div className="card-body">
+        <div className="field">
+          <label htmlFor="paste">엑셀에서 범위를 복사해 붙여넣으세요</label>
+          <textarea
+            id="paste"
+            rows={5}
+            value={text}
+            placeholder={"운송일자\t품목\t출발지\t도착지\t차주\t연락처\t화주"}
+            onChange={(e) => handleText(e.target.value)}
+          />
+          <span className="hint">
+            첫 줄을 제목 줄로 짐작합니다. 틀리면 아래에서 고칠 수 있습니다. 한 번에 {MAX_ROWS}건까지.
+          </span>
+        </div>
 
-      {error && <p className="error">{error}</p>}
+        {error && (
+          <div className="err-summary" role="alert" style={{ marginTop: 16, marginBottom: 0 }}>
+            <h3>{error}</h3>
+          </div>
+        )}
+      </div>
 
       {parsed && (
         <>
+          <div className="card-head">
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}>
+              <input
+                type="checkbox"
+                checked={hasHeader}
+                onChange={(e) => setHasHeader(e.target.checked)}
+                style={{ width: "auto", minHeight: 0 }}
+              />
+              첫 줄은 제목 줄입니다
+            </label>
+            <span className="badge badge-plain">
+              {ready.length}건 가져옴 · {failed.length}건 제외
+            </span>
+          </div>
+
           {parsed.truncated && (
-            <p className="warn">
-              {parsed.truncated.rows}줄이 상한을 넘어 잘렸습니다. 나눠서 올려 주세요.
-            </p>
+            <div className="card-body" style={{ paddingBottom: 0 }}>
+              <div className="notice-unsupported">
+                <div className="nu-title">{parsed.truncated.rows}줄이 잘렸습니다</div>
+                <div className="nu-body">한 번에 {MAX_ROWS}건까지입니다. 나눠서 올려 주세요.</div>
+              </div>
+            </div>
           )}
 
-          <label className="checkline">
-            <input
-              type="checkbox"
-              checked={hasHeader}
-              onChange={(e) => setHasHeader(e.target.checked)}
-            />
-            첫 줄은 제목 줄입니다
-          </label>
-
-          <div className="table-wrap">
-            <table className="preview">
+          <div className="table-scroll">
+            <table className="table preview-table">
               <thead>
                 <tr>
                   <th className="num">줄</th>
                   {mapping.map((field, index) => (
                     <th key={index}>
                       <select
+                        className="map-select"
                         aria-label={`${index + 1}번째 칼럼`}
                         value={field ?? ""}
                         onChange={(e) => setColumn(index, (e.target.value || null) as Field | null)}
@@ -133,21 +138,19 @@ export default function PasteImport() {
                           <option key={f} value={f}>{FIELD_LABEL[f]}</option>
                         ))}
                       </select>
-                      {header?.[index] && <div className="orig">{header[index]}</div>}
+                      {header?.[index] && <span className="norm">{header[index]}</span>}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {preview.map((result) => {
-                  const row = parsed.rows[hasHeader ? result.lineNumber - 1 : result.lineNumber - 1];
+                {results.slice(0, PREVIEW_ROWS).map((result) => {
+                  const row = parsed.rows[result.lineNumber - 1];
                   return (
                     <tr key={result.lineNumber} className={result.errors.length ? "bad" : ""}>
-                      <td className="num muted">{result.lineNumber}</td>
+                      <td className="num" style={{ color: "var(--ink-3)" }}>{result.lineNumber}</td>
                       {mapping.map((field, index) => (
-                        <td key={index} className={field ? "" : "skipped"}>
-                          {/* 읽힌 줄은 저장될 값을 보여준다. 원본 글자가 아니라
-                              "이렇게 들어갑니다"가 보여야 고칠 수 있다. */}
+                        <td key={index} style={field ? undefined : { color: "var(--ink-3)" }}>
                           {cellText(field, result.draft, row?.[index] ?? "")}
                         </td>
                       ))}
@@ -158,32 +161,38 @@ export default function PasteImport() {
             </table>
           </div>
 
-          {results.length > PREVIEW_ROWS && (
-            <p className="hint">앞 {PREVIEW_ROWS}줄만 보여줍니다. 가져오기는 전체가 대상입니다.</p>
-          )}
+          <div className="card-body">
+            {results.length > PREVIEW_ROWS && (
+              <p className="hint">앞 {PREVIEW_ROWS}줄만 보여줍니다. 가져오기는 전체가 대상입니다.</p>
+            )}
 
-          {failed.length > 0 && (
-            <div className="problems">
-              <strong>{failed.length}줄은 가져오지 않습니다.</strong>
-              <ul>
-                {failed.slice(0, 10).map((r) => (
-                  <li key={r.lineNumber}>
-                    {r.lineNumber}번째 줄 — {r.errors.join(" ")}
-                  </li>
-                ))}
-              </ul>
-              {failed.length > 10 && <p className="hint">외 {failed.length - 10}줄</p>}
+            {failed.length > 0 && (
+              <div className="err-summary" style={{ marginBottom: 0 }}>
+                <h3>{failed.length}줄은 가져오지 않습니다</h3>
+                <ul className="reason-list" style={{ padding: 0, listStyle: "none" }}>
+                  {failed.slice(0, 10).map((r) => (
+                    <li key={r.lineNumber}>
+                      <span className="ln">{r.lineNumber}번째</span>
+                      <span>{r.errors.join(" ")}</span>
+                    </li>
+                  ))}
+                </ul>
+                {failed.length > 10 && <p className="hint" style={{ marginTop: 8 }}>외 {failed.length - 10}줄</p>}
+              </div>
+            )}
+
+            <div style={{ marginTop: 18 }}>
+              <button
+                className="btn btn-primary"
+                type="button"
+                style={{ minHeight: 42 }}
+                onClick={submit}
+                disabled={pending || ready.length === 0}
+              >
+                {pending ? "가져오는 중…" : `${ready.length}건 가져오기`}
+              </button>
             </div>
-          )}
-
-          <button
-            type="button"
-            className="primary"
-            onClick={submit}
-            disabled={pending || ready.length === 0}
-          >
-            {pending ? "가져오는 중…" : `${ready.length}건 가져오기`}
-          </button>
+          </div>
         </>
       )}
     </div>

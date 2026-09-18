@@ -100,7 +100,7 @@ export async function signIn(page: Page, account: Account): Promise<void> {
   await page.goto(`${BASE_URL}/login`, { waitUntil: "networkidle" });
   await page.fill("#email", account.email);
   await page.fill("#password", account.password);
-  await Promise.all([page.waitForURL(`${BASE_URL}/shipments`), page.click("button.primary")]);
+  await Promise.all([page.waitForURL(`${BASE_URL}/shipments`), page.click(".btn-primary")]);
 }
 
 export async function createShipment(
@@ -116,22 +116,25 @@ export async function createShipment(
   await page.fill("#memo", values.memo);
   await Promise.all([
     page.waitForURL(/\/shipments\/[0-9a-f-]+/),
-    page.click("button.primary"),
+    page.click("button[type=submit].btn-primary"),
   ]);
   return page.url().match(/\/shipments\/([0-9a-f-]+)/)![1]!;
 }
 
 /** 증빙 요청 링크를 만들고 주소를 돌려준다. */
 export async function createSignLink(page: Page, kindShort: string): Promise<string> {
-  await page.click(`.request .chip:has-text("${kindShort}")`);
-  await page.click("button.primary:has-text('서명 링크 만들기')");
-  await page.waitForSelector(".link-row input");
-  return page.locator(".link-row input").inputValue();
+  await page.click(`.card button.btn:has-text("${kindShort}")`);
+  await page.click("button:has-text('서명 링크 만들기')");
+  await page.waitForSelector("code.link-url");
+  return (await page.locator("code.link-url").textContent())!.trim();
 }
 
 /** 캔버스에 곡선 하나를 그린다. 손가락 서명 흉내. */
 export async function drawSignature(page: Page): Promise<void> {
-  const box = (await page.locator("canvas.sig-canvas").boundingBox())!;
+  // 화면 밖에 있으면 마우스 좌표가 캔버스에 닿지 않아 획이 안 그려진다.
+  await page.locator("canvas.sign-pad").scrollIntoViewIfNeeded();
+  await page.waitForTimeout(150);
+  const box = (await page.locator("canvas.sign-pad").boundingBox())!;
   await page.mouse.move(box.x + 30, box.y + box.height * 0.65);
   await page.mouse.down();
   for (let i = 0; i <= 50; i++) {

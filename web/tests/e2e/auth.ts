@@ -24,14 +24,14 @@ export async function run(browser: Browser, A: Account, B: Account): Promise<Che
 
     await page.fill("#email", A.email);
     await page.fill("#password", "완전히틀린비밀번호");
-    await page.click("button.primary");
-    const wrongPassword = (await page.locator(".error").textContent({ timeout: 15000 }))?.trim();
+    await page.click(".btn-primary");
+    const wrongPassword = (await page.locator(".err-summary h3").textContent({ timeout: 15000 }))?.trim();
 
     await page.fill("#email", "존재하지않는사람@e2e.invalid");
     await page.fill("#password", "완전히틀린비밀번호");
-    await page.click("button.primary");
+    await page.click(".btn-primary");
     await page.waitForTimeout(1500);
-    const noSuchUser = (await page.locator(".error").textContent())?.trim();
+    const noSuchUser = (await page.locator(".err-summary h3").textContent())?.trim();
 
     c.ok(
       "틀린 비밀번호와 없는 계정의 화면 문구가 글자까지 같다",
@@ -88,7 +88,7 @@ export async function run(browser: Browser, A: Account, B: Account): Promise<Che
   }
 
   // 6. 로그아웃
-  await pageA.click("button.linkish");
+  await pageA.click(".side-foot button");
   await pageA.waitForURL(`${BASE_URL}/login`);
   await pageA.goto(`${BASE_URL}/shipments`, { waitUntil: "networkidle" });
   c.ok("로그아웃 후에는 보호된 화면이 다시 막힌다", pageA.url().endsWith("/login"));

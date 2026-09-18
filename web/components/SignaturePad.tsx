@@ -9,7 +9,8 @@ export interface SignaturePadHandle {
   toPng(): string | null;
 }
 
-const HEIGHT = 180;
+/** CSS의 .sign-pad 높이와 맞춘다. */
+const HEIGHT = 190;
 
 const SignaturePad = forwardRef<SignaturePadHandle, { onInkChange?: (has: boolean) => void }>(
   function SignaturePad({ onInkChange }, ref) {
@@ -73,43 +74,54 @@ const SignaturePad = forwardRef<SignaturePadHandle, { onInkChange?: (has: boolea
     }));
 
     return (
-      <div className="sig">
-        <canvas
-          ref={canvasRef}
-          className="sig-canvas"
-          style={{ height: HEIGHT }}
-          aria-label="서명란"
-          onPointerDown={(e) => {
-            e.currentTarget.setPointerCapture(e.pointerId);
-            drawing.current = true;
-            last.current = point(e);
-          }}
-          onPointerMove={(e) => {
-            if (!drawing.current) return;
-            const ctx = canvasRef.current?.getContext("2d");
-            const from = last.current;
-            if (!ctx || !from) return;
-            const to = point(e);
-            ctx.beginPath();
-            ctx.moveTo(from.x, from.y);
-            ctx.lineTo(to.x, to.y);
-            ctx.stroke();
-            last.current = to;
-            if (!inked.current) {
-              inked.current = true;
-              setHasInk(true);
-              onInkChange?.(true);
-            }
-          }}
-          onPointerUp={() => { drawing.current = false; last.current = null; }}
-          onPointerCancel={() => { drawing.current = false; last.current = null; }}
-          onPointerLeave={() => { drawing.current = false; last.current = null; }}
-        />
-        {!hasInk && <p className="sig-hint">여기에 손가락으로 서명해 주세요</p>}
-        <button type="button" className="sig-clear" onClick={clear} disabled={!hasInk}>
-          지우고 다시
-        </button>
-      </div>
+      <>
+        <div className={`sign-pad-wrap${hasInk ? " has-ink" : ""}`}>
+          <canvas
+            ref={canvasRef}
+            className="sign-pad"
+            role="img"
+            aria-labelledby="pad-label"
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              drawing.current = true;
+              last.current = point(e);
+            }}
+            onPointerMove={(e) => {
+              if (!drawing.current) return;
+              const ctx = canvasRef.current?.getContext("2d");
+              const from = last.current;
+              if (!ctx || !from) return;
+              const to = point(e);
+              ctx.beginPath();
+              ctx.moveTo(from.x, from.y);
+              ctx.lineTo(to.x, to.y);
+              ctx.stroke();
+              last.current = to;
+              if (!inked.current) {
+                inked.current = true;
+                setHasInk(true);
+                onInkChange?.(true);
+              }
+            }}
+            onPointerUp={() => { drawing.current = false; last.current = null; }}
+            onPointerCancel={() => { drawing.current = false; last.current = null; }}
+            onPointerLeave={() => { drawing.current = false; last.current = null; }}
+          />
+          <span className="sign-pad-line" aria-hidden />
+          <span className="sign-pad-hint">이 칸에 손가락으로 서명하세요</span>
+        </div>
+        <div className="od-row" style={{ ["--od-gap" as string]: "10px", marginTop: 10 }}>
+          <button
+            type="button"
+            className="btn od-touch"
+            style={{ minHeight: 48, fontSize: 16 }}
+            onClick={clear}
+            disabled={!hasInk}
+          >
+            지우기
+          </button>
+        </div>
+      </>
     );
   },
 );

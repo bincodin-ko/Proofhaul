@@ -22,7 +22,6 @@ export default function RequestEvidence({ shipmentId }: { shipmentId: string }) 
       if (result.message || !result.token) {
         return setError(result.message ?? "링크를 만들지 못했습니다.");
       }
-      // 주소는 브라우저가 보고 있는 곳을 그대로 쓴다. 설정값을 하나 줄인다.
       setLink(`${window.location.origin}/s/${result.token}`);
       setExpires(result.expiresAt ? new Date(result.expiresAt).toLocaleDateString("ko-KR") : null);
       router.refresh();
@@ -40,15 +39,15 @@ export default function RequestEvidence({ shipmentId }: { shipmentId: string }) 
   }
 
   return (
-    <div className="request">
-      <div className="field">
-        <span className="label">증빙 종류</span>
-        <div className="chips" role="radiogroup" aria-label="증빙 종류">
+    <div>
+      <div className="field" style={{ marginBottom: 14 }}>
+        <label>증빙 종류</label>
+        <div className="od-cluster" style={{ ["--od-gap" as string]: "8px" }} role="radiogroup" aria-label="증빙 종류">
           {REQUESTABLE.map((id) => (
             <button
               key={id}
               type="button"
-              className={`chip ${kind === id ? "on" : ""}`}
+              className={`btn ${kind === id ? "btn-primary" : ""}`}
               aria-pressed={kind === id}
               onClick={() => { setKind(id); setLink(null); }}
             >
@@ -58,24 +57,29 @@ export default function RequestEvidence({ shipmentId }: { shipmentId: string }) 
         </div>
       </div>
 
-      <button type="button" className="primary" onClick={create} disabled={pending}>
+      <button className="btn btn-primary" type="button" style={{ minHeight: 42 }} onClick={create} disabled={pending}>
         {pending ? "만드는 중…" : "서명 링크 만들기"}
       </button>
 
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <div className="err-summary" role="alert" style={{ marginTop: 16, marginBottom: 0 }}>
+          <h3>{error}</h3>
+        </div>
+      )}
 
       {link && (
-        <div className="link-box">
-          <p className="hint">
-            이 주소를 화주 담당자나 차주에게 보내세요. 로그인 없이 열립니다.
-            {expires && ` ${expires}까지 유효합니다.`}
-          </p>
-          <div className="link-row">
-            <input readOnly value={link} onFocus={(e) => e.currentTarget.select()} aria-label="서명 링크" />
-            <button type="button" onClick={copy}>{copied ? "복사됨" : "복사"}</button>
+        <div className="link-box" style={{ marginTop: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>
+            이 주소를 화주 담당자나 차주에게 보내세요
+            {expires && ` · ${expires}까지`}
           </div>
-          <p className="hint">
-            이 주소는 지금만 볼 수 있습니다. 서버에는 해시만 남아 다시 만들 수 없습니다.
+          <code className="link-url">{link}</code>
+          <div className="od-row" style={{ ["--od-gap" as string]: "8px" }}>
+            <button className="btn" type="button" onClick={copy}>{copied ? "복사됨" : "링크 복사"}</button>
+          </div>
+          <p className="link-once">
+            로그인 없이 열립니다. <strong>이 주소는 지금만 볼 수 있습니다</strong> — 서버에는 해시만 남아
+            다시 만들 수 없습니다.
           </p>
         </div>
       )}

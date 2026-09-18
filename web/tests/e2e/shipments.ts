@@ -43,7 +43,7 @@ export async function run(browser: Browser, A: Account, B: Account): Promise<Che
   await page.fill("#memo", "야간 상차");
   await Promise.all([
     page.waitForURL(/\/shipments\/[0-9a-f-]+\?new=1/),
-    page.click("button.primary"),
+    page.click("button[type=submit].btn-primary"),
   ]);
   const detailUrl = page.url();
   const detail = await page.locator("body").innerText();
@@ -63,11 +63,11 @@ export async function run(browser: Browser, A: Account, B: Account): Promise<Che
   await page.evaluate((text) => navigator.clipboard.writeText(text), SPREADSHEET_CLIPBOARD);
   await page.click("#paste");
   await page.keyboard.press("Control+V");
-  await page.waitForSelector("table.preview", { timeout: 15000 });
+  await page.waitForSelector("table.preview-table", { timeout: 15000 });
 
-  c.ok("첫 줄을 제목 줄로 알아본다", await page.locator(".checkline input").isChecked());
+  c.ok("첫 줄을 제목 줄로 알아본다", await page.locator('.card-head input[type=checkbox]').isChecked());
 
-  const selects = page.locator("table.preview thead select");
+  const selects = page.locator("table.preview-table thead select");
   const mapping = await selects.evaluateAll((els) => els.map((e) => (e as HTMLSelectElement).value));
   c.ok(
     "칼럼 8개를 자동으로 짝지어 준다",
@@ -79,7 +79,7 @@ export async function run(browser: Browser, A: Account, B: Account): Promise<Che
     mapping.join(","),
   );
 
-  const preview = await page.locator("table.preview").innerText();
+  const preview = await page.locator("table.preview-table").innerText();
   c.ok("미리보기에 저장될 값이 보인다 (2026.08.16 → 2026-08-16)", preview.includes("2026-08-16"));
   c.ok("미리보기에 정리된 연락처가 보인다 (01098765432 → 010-9876-5432)", preview.includes("010-9876-5432"));
 
@@ -89,7 +89,7 @@ export async function run(browser: Browser, A: Account, B: Account): Promise<Che
     body.includes("2줄은 가져오지 않습니다") && body.includes("냉동탑차") && body.includes("8/18"),
     body.match(/\d줄은 가져오지 않습니다/)?.[0],
   );
-  const buttonText = await page.locator("button.primary").innerText();
+  const buttonText = await page.locator("button:has-text('가져오기')").innerText();
   c.ok("가져올 건수를 버튼에 적는다", buttonText.includes("3건 가져오기"), buttonText);
 
   // 칼럼 매핑을 손으로 바꿔 본다
@@ -99,7 +99,7 @@ export async function run(browser: Browser, A: Account, B: Account): Promise<Che
   await selects.nth(7).selectOption("memo");
   await page.waitForTimeout(300);
 
-  await Promise.all([page.waitForURL(`${BASE_URL}/shipments`), page.click("button.primary")]);
+  await Promise.all([page.waitForURL(`${BASE_URL}/shipments`), page.click("button:has-text('가져오기')")]);
   await page.reload({ waitUntil: "networkidle" });
   const list = await page.locator("body").innerText();
   c.ok(
@@ -107,7 +107,7 @@ export async function run(browser: Browser, A: Account, B: Account): Promise<Che
     ["2026-08-20", "2026-08-16", "2026-08-15", "2026-08-14"].every((d) => list.includes(d)),
   );
   c.ok("못 읽은 줄은 들어가지 않았다", !list.includes("2026-08-17") && !list.includes("남도유통"));
-  c.ok("증빙이 없는 건은 '없음'으로 보인다", (await page.locator("td .missing").count()) === 4);
+  c.ok("증빙이 없는 건은 '없음'으로 보인다", (await page.locator("td .badge-miss").count()) === 4);
 
   // ── 남의 운송 건 열어보기 ──────────────────────────────────────────
   const { ctx: ctxB, page: pageB } = await newContext(browser);

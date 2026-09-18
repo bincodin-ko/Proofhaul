@@ -112,23 +112,34 @@ const SignaturePad = forwardRef<SignaturePadHandle, Props>(function SignaturePad
   }));
 
   return (
-    <div className="sig">
-      <canvas
-        ref={canvasRef}
-        className="sig-canvas"
-        style={{ height: HEIGHT }}
-        onPointerDown={start}
-        onPointerMove={move}
-        onPointerUp={end}
-        onPointerCancel={end}
-        onPointerLeave={end}
-        aria-label="서명란"
-      />
-      {!hasInk && <p className="sig-hint">여기에 손가락으로 서명해 주세요</p>}
-      <button type="button" className="sig-clear" onClick={clear} disabled={!hasInk}>
-        지우고 다시
-      </button>
-    </div>
+    <>
+      <div className={`sign-pad-wrap${hasInk ? " has-ink" : ""}`}>
+        <canvas
+          ref={canvasRef}
+          className="sign-pad"
+          onPointerDown={start}
+          onPointerMove={move}
+          onPointerUp={end}
+          onPointerCancel={end}
+          onPointerLeave={end}
+          role="img"
+          aria-label="서명란"
+        />
+        <span className="sign-pad-line" aria-hidden />
+        <span className="sign-pad-hint">이 칸에 손가락으로 서명하세요</span>
+      </div>
+      <div className="od-row" style={{ ["--od-gap" as string]: "10px", marginTop: 10 }}>
+        <button
+          type="button"
+          className="btn od-touch"
+          style={{ minHeight: 46, fontSize: 16 }}
+          onClick={clear}
+          disabled={!hasInk}
+        >
+          지우기
+        </button>
+      </div>
+    </>
   );
 });
 

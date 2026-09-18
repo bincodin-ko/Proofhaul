@@ -27,9 +27,12 @@ function checkPrintable(...texts: string[]): string | null {
 }
 
 function today() {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 export default function Page() {
@@ -46,32 +49,27 @@ export default function Page() {
 
   const cert = useMemo(() => (certId ? getCert(certId) : null), [certId]);
 
-  useEffect(() => {
-    markVisit();
-  }, []);
+  useEffect(() => { markVisit(); }, []);
 
   useEffect(() => {
-    // 마지막 단계에 닿으면 폰트를 미리 받아둔다. 내려받기 버튼을 눌렀을 때
-    // 2MB를 기다리게 하지 않으려는 것뿐이다.
+    // 마지막 단계에 닿으면 폰트를 미리 받아둔다.
     if (step === "sign") void pdfModule().then((m) => m.loadFontBytes()).catch(() => {});
   }, [step]);
 
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [step]);
-
-  const goToSign = () => {
-    const bad = checkPrintable(...Object.values(common), ...Object.values(detail));
-    if (bad) return setError(bad);
-    setError(null);
-    setStep("sign");
-  };
+  useEffect(() => { window.scrollTo(0, 0); }, [step]);
 
   const goBack = () => {
     setError(null);
     if (step === "form") return setStep("pick");
     if (step === "sign") return setStep("form");
     if (step === "done") return setStep("pick");
+  };
+
+  const goToSign = () => {
+    const bad = checkPrintable(...Object.values(common), ...Object.values(detail));
+    if (bad) return setError(bad);
+    setError(null);
+    setStep("sign");
   };
 
   const startOver = () => {
@@ -117,114 +115,108 @@ export default function Page() {
   }
 
   return (
-    <div className="shell">
-      {step !== "pick" && (
-        <header className="top">
-          <button type="button" className="back" onClick={goBack}>← 뒤로</button>
-          <span className="crumb">{cert?.title}</span>
-          <span className="step">{STEP_LABEL[step]}</span>
-        </header>
-      )}
-
-      {step === "pick" && (
-        <>
-          <h1>안전운임 확인서 생성기</h1>
-          <p className="lede">
-            확인서를 폰에서 적고, 현장에서 손가락으로 서명받아 PDF로 내려받습니다.
-            가입도 설치도 없습니다.
-          </p>
-          <div className="pick">
-            {CERT_TYPES.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => { setCertId(c.id); setDetail({}); setStep("form"); }}
-              >
-                <span className="emoji" aria-hidden>{c.emoji}</span>
-                <span className="body">
-                  <span className="t">{c.title}</span>
-                  <span className="d">{c.desc}</span>
-                </span>
-                <span className="arrow" aria-hidden>›</span>
-              </button>
-            ))}
+    <div className="sign-app">
+      <div className="sign-scroll">
+        {step !== "pick" && (
+          <div className="bait-bar">
+            <button type="button" className="back" onClick={goBack}>← 뒤로</button>
+            <span className="crumb">{cert?.title}</span>
+            <span className="step">{STEP_LABEL[step]}</span>
           </div>
-          <footer className="foot">
-            <p>입력한 내용은 이 브라우저 안에서만 처리됩니다. 서버로 보내지 않고 저장하지도 않습니다.</p>
-            <p>{DISCLAIMER}</p>
-          </footer>
-        </>
-      )}
+        )}
 
-      {step === "form" && cert && (
-        <>
-          <section className="card">
-            <h2>운송 건 정보</h2>
-            <div className="grid">
-              {COMMON_FIELDS.map((f) => (
-                <FieldInput
-                  key={f.key}
-                  field={f}
-                  value={common[f.key] ?? ""}
-                  onChange={(v) => setCommon((s) => ({ ...s, [f.key]: v }))}
-                />
+        {step === "pick" && (
+          <>
+            <div className="bait-head">
+              <h1>안전운임 확인서 생성기</h1>
+              <p>
+                확인서를 폰에서 적고, 현장에서 손가락으로 서명받아 PDF로 내려받습니다.
+                가입도 설치도 없습니다.
+              </p>
+            </div>
+            <div className="pick">
+              {CERT_TYPES.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => { setCertId(c.id); setDetail({}); setStep("form"); }}
+                >
+                  <span className="emoji" aria-hidden>{c.emoji}</span>
+                  <span className="body">
+                    <span className="t">{c.title}</span>
+                    <span className="d">{c.desc}</span>
+                  </span>
+                  <span className="arrow" aria-hidden>›</span>
+                </button>
               ))}
             </div>
-          </section>
+          </>
+        )}
 
-          <section className="card">
-            <h2>{cert.title}</h2>
-            <div className="grid">
-              {cert.fields.map((f) => (
-                <FieldInput
-                  key={f.key}
-                  field={f}
-                  value={detail[f.key] ?? ""}
-                  onChange={(v) => setDetail((s) => ({ ...s, [f.key]: v }))}
-                />
-              ))}
-            </div>
-            {cert.unsupported && (
-              <div className="unsupported">
-                <div className="u-t">{cert.unsupported.label} : 미지원</div>
-                <div className="u-d">{cert.unsupported.reason}</div>
+        {step === "form" && cert && (
+          <>
+            <div className="sign-section">
+              <h2>운송 건 정보</h2>
+              <div className="bait-grid">
+                {COMMON_FIELDS.map((f) => (
+                  <FieldInput
+                    key={f.key}
+                    field={f}
+                    value={common[f.key] ?? ""}
+                    onChange={(v) => setCommon((s) => ({ ...s, [f.key]: v }))}
+                  />
+                ))}
               </div>
-            )}
-          </section>
-
-          <div className="bar">
-            <div className="bar-inner">
-              <button type="button" className="primary" onClick={goToSign}>
-                서명 받기
-              </button>
-              {error && <p className="error">{error}</p>}
             </div>
-          </div>
-        </>
-      )}
 
-      {step === "sign" && cert && (
-        <>
-          <section className="card">
-            <h2>서명자</h2>
-            <div className="grid">
-              <div className="field">
-                <label className="label" htmlFor="signer-name">성명</label>
+            <div className="sign-section">
+              <h2>{cert.title}</h2>
+              <div className="bait-grid">
+                {cert.fields.map((f) => (
+                  <FieldInput
+                    key={f.key}
+                    field={f}
+                    value={detail[f.key] ?? ""}
+                    onChange={(v) => setDetail((s) => ({ ...s, [f.key]: v }))}
+                  />
+                ))}
+              </div>
+              {cert.unsupported && (
+                <div style={{ marginTop: 18 }}>
+                  <div className="notice-unsupported">
+                    <div className="nu-title">{cert.unsupported.label} : 미지원</div>
+                    <div className="nu-body">{cert.unsupported.reason}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {step === "sign" && cert && (
+          <>
+            <div className="sign-section">
+              <h2>서명자</h2>
+              <div className="sign-field">
+                <label htmlFor="signer-name">성명</label>
                 <input
                   id="signer-name"
+                  type="text"
+                  autoComplete="name"
                   value={signerName}
                   onChange={(e) => setSignerName(e.target.value)}
                   placeholder="서명하시는 분 이름"
                 />
               </div>
-              <div className="field wide">
-                <span className="label">구분</span>
-                <div className="chips" role="radiogroup" aria-label="서명자 구분">
+              <div className="sign-field">
+                <label>구분</label>
+                <div className="od-cluster" style={{ ["--od-gap" as string]: "8px" }} role="radiogroup" aria-label="서명자 구분">
                   {SIGNER_ROLES.map((role) => (
                     <button
                       key={role}
                       type="button"
-                      className={`chip ${signerRole === role ? "on" : ""}`}
+                      className={`btn od-touch ${signerRole === role ? "btn-primary" : ""}`}
+                      style={{ minHeight: 46, fontSize: 16 }}
                       aria-pressed={signerRole === role}
                       onClick={() => setSignerRole(role)}
                     >
@@ -234,38 +226,61 @@ export default function Page() {
                 </div>
               </div>
             </div>
-          </section>
 
-          <section className="card">
-            <h2>서명</h2>
-            <SignaturePad ref={padRef} onInkChange={setHasInk} />
-          </section>
+            <div className="sign-section">
+              <h2>서명</h2>
+              <SignaturePad ref={padRef} onInkChange={setHasInk} />
+            </div>
+          </>
+        )}
 
-          <div className="bar">
-            <div className="bar-inner">
-              <button type="button" className="primary" onClick={download} disabled={busy}>
-                {busy ? "만드는 중…" : "PDF 내려받기"}
+        {step === "done" && cert && (
+          <div className="sign-state" style={{ minHeight: "auto", padding: "40px 0" }}>
+            <span className="st-mark ok" aria-hidden>
+              <svg viewBox="0 0 24 24"><path d="M5 13l4.5 4.5L19 7" /></svg>
+            </span>
+            <h1>PDF를 내려받았습니다</h1>
+            <p className="st-body">{cert.title} · 내려받기 폴더를 확인해 주세요.</p>
+            <div className="st-actions">
+              <button type="button" className="btn btn-primary btn-lg" onClick={startOver}>
+                확인서 하나 더 만들기
               </button>
-              {error && <p className="error">{error}</p>}
-              {!error && !hasInk && <p className="note">서명을 하면 PDF를 만들 수 있습니다</p>}
             </div>
           </div>
-        </>
+        )}
+
+        {step === "pick" && (
+          <p className="sign-foot" style={{ padding: "28px 0 0" }}>
+            입력한 내용은 이 브라우저 안에서만 처리됩니다. 서버로 보내지 않고 저장하지도 않습니다.
+            <br />{DISCLAIMER}
+          </p>
+        )}
+      </div>
+
+      {(step === "form" || step === "sign") && (
+        <div className="sign-actionbar">
+          {step === "form" ? (
+            <button type="button" className="btn btn-primary btn-lg" onClick={goToSign}>
+              서명 받기
+            </button>
+          ) : (
+            <button type="button" className="btn btn-primary btn-lg" onClick={download} disabled={busy}>
+              {busy ? "만드는 중…" : "PDF 내려받기"}
+            </button>
+          )}
+          {error ? (
+            <p className="why" style={{ color: "var(--miss)", fontWeight: 600 }}>{error}</p>
+          ) : (
+            step === "sign" && !hasInk && <p className="why">서명을 하면 PDF를 만들 수 있습니다.</p>
+          )}
+        </div>
       )}
 
-      {step === "done" && cert && (
-        <>
-          <div className="done">
-            <div className="check" aria-hidden>✅</div>
-            <h2>PDF를 내려받았습니다</h2>
-            <p>{cert.title} · 내려받기 폴더를 확인해 주세요.</p>
-            <button type="button" className="linkish" onClick={startOver}>확인서 하나 더 만들기</button>
-          </div>
-          <footer className="foot">
-            <p>{DISCLAIMER}</p>
-            <p>입력값은 서버에 남지 않습니다. 이 화면을 닫으면 사라집니다.</p>
-          </footer>
-        </>
+      {step === "done" && (
+        <p className="sign-foot">
+          {DISCLAIMER}
+          <br />입력값은 서버에 남지 않습니다. 이 화면을 닫으면 사라집니다.
+        </p>
       )}
     </div>
   );

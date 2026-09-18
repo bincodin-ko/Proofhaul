@@ -83,9 +83,9 @@ export async function run(browser: Browser, A: Account, B: Account): Promise<Che
   );
   c.ok(
     "입력·서명·보내기가 한 페이지에 있다 (단계를 나누지 않는다)",
-    (await signer.locator("canvas.sig-canvas").count()) === 1 &&
+    (await signer.locator("canvas.sign-pad").count()) === 1 &&
       (await signer.locator("#f-arrivedAt").count()) === 1 &&
-      (await signer.locator("button.primary:has-text('서명하고 보내기')").count()) === 1,
+      (await signer.locator("button:has-text('서명 보내기')").count()) === 1,
   );
 
   // ── 침범 시도: 토큰 문자열 변조 ───────────────────────────────────
@@ -103,7 +103,7 @@ export async function run(browser: Browser, A: Account, B: Account): Promise<Che
     const text = await page.locator("body").innerText();
     c.ok(
       `${name}으로는 아무것도 열리지 않는다`,
-      text.includes("만료되었거나 올바르지 않은") &&
+      text.includes("열 수 없는 링크") &&
         !text.includes(A.companyName) &&
         !text.includes(B.companyName),
       text.split("\n")[0],
@@ -149,12 +149,14 @@ export async function run(browser: Browser, A: Account, B: Account): Promise<Che
   await signer.fill("#f-arrivedAt", "08:40");
   await signer.fill("#f-loadStartAt", "11:15");
   await signer.fill("#f-unloadStartAt", "15:05");
+  // 비고는 접힌 <details> 안에 있다 — 현장에서 스크롤을 줄이려는 설계다.
+  await signer.click(".sign-extra > summary");
   await signer.fill("#f-note", "3번 게이트 앞 대기");
   await signer.fill("#signer-name", "박영희");
-  await signer.click(".chip:has-text('화주 담당자')");
+  await signer.click("button:has-text('화주 담당자')");
   await drawSignature(signer);
-  await signer.click("button.primary:has-text('서명하고 보내기')");
-  await signer.waitForSelector(".ok-notice", { timeout: 20000 });
+  await signer.click("button:has-text('서명 보내기')");
+  await signer.waitForSelector(".sign-state", { timeout: 20000 });
   c.ok("서명이 완료된다", (await signer.locator("body").innerText()).includes("서명이 완료"));
 
   await resetRateLimits();
@@ -162,7 +164,7 @@ export async function run(browser: Browser, A: Account, B: Account): Promise<Che
   const reopened = await signer.locator("body").innerText();
   c.ok(
     "서명 후 같은 링크로는 고칠 수 없다",
-    reopened.includes("이미 서명이 끝난") && !reopened.includes("서명하고 보내기"),
+    reopened.includes("이미 서명이 끝났") && !reopened.includes("서명 보내기"),
     reopened.split("\n")[0],
   );
 

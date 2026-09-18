@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // 개발용 떠다니는 배지. 화면 아래쪽 버튼을 가려서 끈다.
+  devIndicators: false,
   async headers() {
     return [
       {

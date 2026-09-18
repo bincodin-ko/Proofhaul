@@ -117,3 +117,11 @@ export async function createShipments(
     return rows.map((r) => r.id);
   });
 }
+
+/** 사이드바에 쓸 회사 이름. 세션이 알려준 회사만 읽는다. */
+export async function getCompanyName(companyId: string): Promise<string> {
+  const rows = await withCompany(companyId, (sql) =>
+    sql<{ name: string }>("SELECT name FROM company WHERE id = $1", [companyId]),
+  );
+  return rows[0]?.name ?? "";
+}

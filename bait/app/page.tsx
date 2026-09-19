@@ -3,7 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import FieldInput from "@/components/FieldInput";
 import SignaturePad, { SignaturePadHandle } from "@/components/SignaturePad";
-import { CERT_TYPES, CertId, COMMON_FIELDS, DISCLAIMER, SIGNER_ROLES, getCert } from "@/lib/certs";
+import {
+  CERT_TYPES,
+  CONFIRMER_FIELDS,
+  CertId,
+  DISCLAIMER,
+  getCert,
+  resolveForm,
+} from "@/lib/certs";
 import { unprintable } from "@/lib/font-coverage";
 import { countGenerated, markVisit } from "@/lib/metrics";
 
@@ -26,28 +33,19 @@ function checkPrintable(...texts: string[]): string | null {
   return `PDF에 넣을 수 없는 글자가 있습니다: ${bad.join(" ")} — 이대로 만들면 빈칸으로 인쇄됩니다. 지우거나 한글·숫자로 바꿔주세요.`;
 }
 
-function today() {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
-
 export default function Page() {
   const [step, setStep] = useState<Step>("pick");
   const [certId, setCertId] = useState<CertId | null>(null);
-  const [common, setCommon] = useState<Values>({ shippedOn: today() });
-  const [detail, setDetail] = useState<Values>({});
-  const [signerName, setSignerName] = useState("");
-  const [signerRole, setSignerRole] = useState<string>(SIGNER_ROLES[0]);
+  const [variant, setVariant] = useState<string>("");
+  const [values, setValues] = useState<Values>({});
+  const [confirmer, setConfirmer] = useState<Values>({});
   const [hasInk, setHasInk] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const padRef = useRef<SignaturePadHandle>(null);
 
   const cert = useMemo(() => (certId ? getCert(certId) : null), [certId]);
+  const form = useMemo(() => (cert ? resolveForm(cert, variant) : null), [cert, variant]);
 
   useEffect(() => { markVisit(); }, []);
 
@@ -66,7 +64,7 @@ export default function Page() {
   };
 
   const goToSign = () => {
-    const bad = checkPrintable(...Object.values(common), ...Object.values(detail));
+    const bad = checkPrintable(...Object.values(values));
     if (bad) return setError(bad);
     setError(null);
     setStep("sign");
@@ -75,19 +73,20 @@ export default function Page() {
   const startOver = () => {
     setStep("pick");
     setCertId(null);
-    setDetail({});
-    setSignerName("");
+    setVariant("");
+    setValues({});
+    setConfirmer({});
     setHasInk(false);
     setError(null);
     padRef.current?.clear();
   };
 
   async function download() {
-    if (!cert) return;
+    if (!cert || !form) return;
     const png = padRef.current?.toPng();
-    if (!signerName.trim()) return setError("서명자 성명을 적어주세요.");
+    if (!(confirmer.confirmerName ?? "").trim()) return setError("확인자 성명을 적어주세요.");
     if (!png) return setError("서명란에 서명해 주세요.");
-    const bad = checkPrintable(...Object.values(common), ...Object.values(detail), signerName);
+    const bad = checkPrintable(...Object.values(values), ...Object.values(confirmer));
     if (bad) return setError(bad);
 
     setBusy(true);
@@ -95,7 +94,15 @@ export default function Page() {
     try {
       const { buildCertPdf, fileNameFor } = await pdfModule();
       const createdAt = new Date();
-      const doc = { cert, common, detail, signerName: signerName.trim(), signerRole, signaturePng: png, createdAt };
+      const doc = {
+        cert,
+        form,
+        values,
+        confirmerOrg: (confirmer.confirmerOrg ?? "").trim(),
+        confirmerName: (confirmer.confirmerName ?? "").trim(),
+        signaturePng: png,
+        createdAt,
+      };
       const blob = await buildCertPdf(doc);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -120,7 +127,7 @@ export default function Page() {
         {step !== "pick" && (
           <div className="bait-bar">
             <button type="button" className="back" onClick={goBack}>← 뒤로</button>
-            <span className="crumb">{cert?.title}</span>
+            <span className="crumb">{form?.title ?? cert?.title}</span>
             <span className="step">{STEP_LABEL[step]}</span>
           </div>
         )}
@@ -130,8 +137,8 @@ export default function Page() {
             <div className="bait-head">
               <h1>안전운임 확인서 생성기</h1>
               <p>
-                확인서를 폰에서 적고, 현장에서 손가락으로 서명받아 PDF로 내려받습니다.
-                가입도 설치도 없습니다.
+                국토교통부 고시 별지 서식 그대로 폰에서 적고, 현장에서 손가락으로 서명받아
+                PDF로 내려받습니다. 가입도 설치도 없습니다.
               </p>
             </div>
             <div className="pick">
@@ -139,7 +146,12 @@ export default function Page() {
                 <button
                   key={c.id}
                   type="button"
-                  onClick={() => { setCertId(c.id); setDetail({}); setStep("form"); }}
+                  onClick={() => {
+                    setCertId(c.id);
+                    setVariant(c.pick.variants[0]?.label ?? "");
+                    setValues({});
+                    setStep("form");
+                  }}
                 >
                   <span className="emoji" aria-hidden>{c.emoji}</span>
                   <span className="body">
@@ -153,31 +165,52 @@ export default function Page() {
           </>
         )}
 
-        {step === "form" && cert && (
+        {step === "form" && cert && form && (
           <>
             <div className="sign-section">
-              <h2>운송 건 정보</h2>
+              <h2>{cert.pick.label}</h2>
+              <div className="od-cluster" style={{ ["--od-gap" as string]: "8px" }} role="radiogroup" aria-label={cert.pick.label}>
+                {cert.pick.variants.map((v) => (
+                  <button
+                    key={v.label}
+                    type="button"
+                    className={`btn od-touch ${variant === v.label ? "btn-primary" : ""}`}
+                    style={{ minHeight: 46, fontSize: 16 }}
+                    aria-pressed={variant === v.label}
+                    onClick={() => { setVariant(v.label); setValues({}); }}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+              <p className="hint" style={{ marginTop: 10 }}>
+                {form.no} · {form.title}
+              </p>
+            </div>
+
+            <div className="sign-section">
+              <h2>사업장 · 차량</h2>
               <div className="bait-grid">
-                {COMMON_FIELDS.map((f) => (
+                {form.header.map((f) => (
                   <FieldInput
                     key={f.key}
                     field={f}
-                    value={common[f.key] ?? ""}
-                    onChange={(v) => setCommon((s) => ({ ...s, [f.key]: v }))}
+                    value={values[f.key] ?? ""}
+                    onChange={(v) => setValues((s) => ({ ...s, [f.key]: v }))}
                   />
                 ))}
               </div>
             </div>
 
             <div className="sign-section">
-              <h2>{cert.title}</h2>
+              <h2>{form.title}</h2>
               <div className="bait-grid">
-                {cert.fields.map((f) => (
+                {form.body.map((f) => (
                   <FieldInput
                     key={f.key}
                     field={f}
-                    value={detail[f.key] ?? ""}
-                    onChange={(v) => setDetail((s) => ({ ...s, [f.key]: v }))}
+                    value={values[f.key] ?? ""}
+                    onChange={(v) => setValues((s) => ({ ...s, [f.key]: v }))}
                   />
                 ))}
               </div>
@@ -193,38 +226,36 @@ export default function Page() {
           </>
         )}
 
-        {step === "sign" && cert && (
+        {step === "sign" && cert && form && (
           <>
             <div className="sign-section">
-              <h2>서명자</h2>
-              <div className="sign-field">
-                <label htmlFor="signer-name">성명</label>
-                <input
-                  id="signer-name"
-                  type="text"
-                  autoComplete="name"
-                  value={signerName}
-                  onChange={(e) => setSignerName(e.target.value)}
-                  placeholder="서명하시는 분 이름"
-                />
-              </div>
-              <div className="sign-field">
-                <label>구분</label>
-                <div className="od-cluster" style={{ ["--od-gap" as string]: "8px" }} role="radiogroup" aria-label="서명자 구분">
-                  {SIGNER_ROLES.map((role) => (
-                    <button
-                      key={role}
-                      type="button"
-                      className={`btn od-touch ${signerRole === role ? "btn-primary" : ""}`}
-                      style={{ minHeight: 46, fontSize: 16 }}
-                      aria-pressed={signerRole === role}
-                      onClick={() => setSignerRole(role)}
-                    >
-                      {role}
-                    </button>
-                  ))}
+              <h2>확인 내용</h2>
+              <p className="hint" style={{ lineHeight: 1.65 }}>{form.statement}</p>
+              {form.obligation && (
+                <div style={{ marginTop: 14 }}>
+                  <div className="notice-unsupported">
+                    <div className="nu-title">서명 의무 조항</div>
+                    <div className="nu-body">{form.obligation}</div>
+                  </div>
                 </div>
-              </div>
+              )}
+            </div>
+
+            <div className="sign-section">
+              <h2>확인자</h2>
+              {CONFIRMER_FIELDS.map((f) => (
+                <div className="sign-field" key={f.key}>
+                  <label htmlFor={`f-${f.key}`}>{f.label}</label>
+                  <input
+                    id={`f-${f.key}`}
+                    type="text"
+                    autoComplete={f.key === "confirmerName" ? "name" : "organization"}
+                    value={confirmer[f.key] ?? ""}
+                    placeholder={f.placeholder}
+                    onChange={(e) => setConfirmer((s) => ({ ...s, [f.key]: e.target.value }))}
+                  />
+                </div>
+              ))}
             </div>
 
             <div className="sign-section">
@@ -234,13 +265,13 @@ export default function Page() {
           </>
         )}
 
-        {step === "done" && cert && (
+        {step === "done" && form && (
           <div className="sign-state" style={{ minHeight: "auto", padding: "40px 0" }}>
             <span className="st-mark ok" aria-hidden>
               <svg viewBox="0 0 24 24"><path d="M5 13l4.5 4.5L19 7" /></svg>
             </span>
             <h1>PDF를 내려받았습니다</h1>
-            <p className="st-body">{cert.title} · 내려받기 폴더를 확인해 주세요.</p>
+            <p className="st-body">{form.title} · 내려받기 폴더를 확인해 주세요.</p>
             <div className="st-actions">
               <button type="button" className="btn btn-primary btn-lg" onClick={startOver}>
                 확인서 하나 더 만들기

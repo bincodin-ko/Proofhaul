@@ -192,11 +192,17 @@ input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--miss);
 .sign-pad-hint{position:absolute;left:0;right:0;bottom:16px;text-align:center;font-size:15px;color:var(--ink-3);pointer-events:none}
 .sign-pad-line{position:absolute;left:24px;right:24px;bottom:46px;border-bottom:1px dashed var(--line-strong);pointer-events:none}
 .sign-pad-wrap.has-ink .sign-pad-hint,.sign-pad-wrap.has-ink .sign-pad-line{display:none}
+/* 붙박이 바. sticky로 두면 화면 아래 내용 위에 겹쳐 앉는다.
+   390x664 화면에서 서명란 190px 중 89px이 이 바 밑에 깔렸고, 그 자리를 누르면
+   그림이 그려지는 대신 버튼이 눌렸다. 고정으로 바꾸고 그만큼 자리를 비워 둔다. */
 .sign-actionbar{
-  position:sticky;bottom:0;z-index:4;
+  position:fixed;left:0;right:0;bottom:0;z-index:4;
+  width:100%;max-width:520px;margin:0 auto;
   background:#fff;border-top:1px solid var(--line);
-  padding:14px 20px 16px;margin-top:20px;
+  padding:14px 20px calc(16px + env(safe-area-inset-bottom,0px));
 }
+.sign-app:has(.sign-actionbar) .sign-scroll{padding-bottom:136px}
+.sign-pad-wrap{scroll-margin-bottom:136px}
 .btn-lg{width:100%;min-height:58px;font-size:19px;border-radius:var(--r-2)}
 .sign-actionbar .why{margin-top:8px;font-size:15px;color:var(--ink-2);text-align:center;line-height:1.5}
 .sign-foot{padding:16px 20px 24px;font-size:13px;color:var(--ink-3);text-align:center;line-height:1.6}

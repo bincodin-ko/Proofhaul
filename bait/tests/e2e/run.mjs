@@ -8,6 +8,7 @@
 //   node tests/e2e/run.mjs
 
 import { chromium, devices } from "playwright";
+import { pdfBytes, pdfText } from "./pdf-text.mjs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -32,6 +33,16 @@ await fs.mkdir(OUT, { recursive: true });
 const browser = await chromium.launch({ executablePath: CHROME }).catch(() => chromium.launch());
 const ctx = await browser.newContext({ ...devices["iPhone 13"], acceptDownloads: true, locale: "ko-KR" });
 const page = await ctx.newPage();
+
+await ctx.addInitScript(() => {
+  // 우리가 붙인 파일명을 그대로 붙잡는다.
+  const original = HTMLAnchorElement.prototype.click;
+  window.__downloadNames = [];
+  HTMLAnchorElement.prototype.click = function () {
+    if (this.download) window.__downloadNames.push(this.download);
+    return original.apply(this, arguments);
+  };
+});
 
 const pageErrors = [];
 page.on("pageerror", (e) => pageErrors.push(String(e)));
@@ -65,7 +76,16 @@ cdp.on("Network.requestWillBeSent", ({ requestId, request }) => {
 });
 
 async function sign() {
+  // 서명 화면이 확인 문구만큼 길어졌다. 서명란이 화면 밖에 있으면 좌표가 어긋나
+  // 아무 데도 그려지지 않는다. 먼저 보이는 자리로 끌어온다.
+  await page.locator("canvas.sign-pad").evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await page.waitForTimeout(200);
   const box = await page.locator("canvas.sign-pad").boundingBox();
+  // 붙박이 버튼 바가 서명란을 덮으면 손가락이 그림 대신 버튼을 누른다.
+  const bar = await page.locator(".sign-actionbar").boundingBox();
+  ok("서명란이 버튼 바에 가리지 않는다",
+     box.y + box.height <= bar.y + 0.5,
+     `서명란 ${Math.round(box.y)}~${Math.round(box.y + box.height)} / 버튼 바 ${Math.round(bar.y)}부터`);
   await page.mouse.move(box.x + 30, box.y + box.height * 0.65);
   await page.mouse.down();
   for (let i = 0; i <= 50; i++) {
@@ -78,12 +98,18 @@ async function sign() {
 }
 
 async function download(name) {
-  const [dl] = await Promise.all([
-    page.waitForEvent("download", { timeout: 60000 }),
-    page.getByRole("button", { name: "PDF 내려받기" }).click(),
-  ]);
-  await dl.saveAs(path.join(OUT, name));
-  return dl.suggestedFilename();
+  try {
+    const [dl] = await Promise.all([
+      page.waitForEvent("download", { timeout: 30000 }),
+      page.getByRole("button", { name: "PDF 내려받기" }).click(),
+    ]);
+    await dl.saveAs(path.join(OUT, name));
+    return dl.suggestedFilename();
+  } catch (e) {
+    // 화면이 막아 세운 이유를 그대로 들고 나온다. 타임아웃만 보면 원인을 알 수 없다.
+    const why = await page.locator(".sign-actionbar .why").textContent().catch(() => null);
+    throw new Error(`${name} 내려받기 실패 — 화면 메시지: ${why ?? "(없음)"} / ${e.message.split("\n")[0]}`);
+  }
 }
 
 // ── 첫 화면 ──────────────────────────────────────────────────────────
@@ -95,72 +121,114 @@ ok("확인서 3종이 모두 있다",
    String(await page.locator(".pick button").count()));
 await page.screenshot({ path: path.join(OUT, "1-pick.png"), fullPage: true });
 
-// ── 대기시간 확인서 ───────────────────────────────────────────────────
+// ── 대기시간 확인서 (별지 제4호서식) ────────────────────────────────
 await page.getByRole("button", { name: /대기시간 확인서/ }).click();
-await page.waitForSelector("#f-arrivedAt");
-await page.fill("#f-carrierName", SECRET.carrier);
-await page.fill("#f-shipperName", SECRET.shipper);
+await page.waitForSelector("#f-requestedEntryAt");
+
+ok("고른 별지 서식 번호가 화면에 뜬다",
+   (await page.locator("body").innerText()).includes("별지 제4호서식"));
+
+await page.fill("#f-siteName", SECRET.shipper);
+await page.fill("#f-siteLocation", "경기 평택시 포승읍 평택항만길");
+await page.fill("#f-containerNo", "ABCU1234567");
 await page.fill("#f-vehicleNo", SECRET.vehicle);
 await page.fill("#f-driverName", SECRET.driver);
-await page.getByRole("button", { name: "수출입 컨테이너 40FT" }).click();
-await page.fill("#f-origin", "부산 신항 2부두");
-await page.fill("#f-destination", "경남 양산시 물금읍 증산리");
-await page.fill("#f-arrivedAt", "08:40");
-await page.fill("#f-loadStartAt", "11:15");
-await page.fill("#f-unloadStartAt", "15:05");
-await page.fill("#f-leftAt", "16:30");
+await page.fill("#f-carrierName", SECRET.carrier);
 
-ok("대기시간 계산란이 '미지원'으로 뜬다",
+// 서식은 년·월·일·시·분을 받는다. 날짜가 바뀌는 대기를 그대로 적을 수 있어야 한다.
+await page.fill("#f-requestedEntryAt", "2026-03-04T21:30");
+await page.fill("#f-entryAt", "2026-03-04T22:10");
+await page.fill("#f-exitAt", "2026-03-05T01:45");
+
+ok("대기료 계산란이 '미지원'으로 뜬다",
    (await page.locator("body").innerText()).includes("미지원"));
 ok("가로 스크롤이 없다",
    await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth));
 
+// 품목을 시멘트로 바꾸면 별지 제6호서식이 되고, 서식에 없는 칸은 사라진다.
+await page.getByRole("button", { name: "시멘트", exact: true }).click();
+await page.waitForTimeout(150);
+const cementText = await page.locator("body").innerText();
+ok("품목을 바꾸면 별지 제6호서식으로 바뀐다", cementText.includes("별지 제6호서식"));
+ok("제6호서식에는 컨테이너번호 칸이 없다", (await page.locator("#f-containerNo").count()) === 0);
+ok("제6호서식에는 운수사 명 칸이 없다", (await page.locator("#f-carrierName").count()) === 0);
+await page.getByRole("button", { name: "수출입 컨테이너", exact: true }).click();
+await page.waitForSelector("#f-containerNo");
+
+// 서식을 바꾸면 입력값을 비운다. 다시 채운다.
+await page.fill("#f-siteLocation", "경기 평택시 포승읍 평택항만길");
+await page.fill("#f-containerNo", "ABCU1234567");
+await page.fill("#f-vehicleNo", SECRET.vehicle);
+await page.fill("#f-driverName", SECRET.driver);
+await page.fill("#f-carrierName", SECRET.carrier);
+await page.fill("#f-requestedEntryAt", "2026-03-04T21:30");
+await page.fill("#f-entryAt", "2026-03-04T22:10");
+await page.fill("#f-exitAt", "2026-03-05T01:45");
+
 // 폰트에 없는 글자는 서명 전에 막는다
-await page.fill("#f-timeNote", "株式會社 로 표기된 서류");
+await page.fill("#f-siteName", "株式會社 제일물류센터");
 await page.getByRole("button", { name: "서명 받기" }).click();
 await page.waitForTimeout(300);
 const guard = await page.locator(".sign-actionbar .why").textContent().catch(() => null);
 ok("폰트에 없는 한자를 서명 전에 막는다",
    Boolean(guard) && guard.includes("넣을 수 없는 글자") && guard.includes("株"), guard);
-ok("막힌 상태에서 서명 단계로 넘어가지 않는다", (await page.locator("#signer-name").count()) === 0);
+ok("막힌 상태에서 서명 단계로 넘어가지 않는다", (await page.locator("#f-confirmerName").count()) === 0);
 
-await page.fill("#f-timeNote", SECRET.note);
+await page.fill("#f-siteName", SECRET.shipper);
 await page.screenshot({ path: path.join(OUT, "2-form.png"), fullPage: true });
 await page.getByRole("button", { name: "서명 받기" }).click();
-await page.waitForSelector("#signer-name");
+await page.waitForSelector("#f-confirmerName");
 ok("드문 한글 음절은 통과한다", true);
 
-await page.fill("#signer-name", SECRET.signer);
-await page.getByRole("button", { name: "화주 담당자" }).click();
+const signText = await page.locator("body").innerText();
+ok("서명 화면에 고시의 확인 문구가 그대로 나온다",
+   signText.includes("대기시간 증빙을 위해 위와 같이 사업장에 출입하였음을 확인합니다"));
+ok("서명 화면에 화주의 서명 의무 조항이 나온다",
+   signText.includes("서명 의무 조항") && signText.includes("별표 1 24.다."));
+
+await page.fill("#f-confirmerOrg", "평택항 제일물류센터 운영팀");
+await page.fill("#f-confirmerName", SECRET.signer);
 await sign();
 await page.screenshot({ path: path.join(OUT, "3-sign.png"), fullPage: true });
 
 const fileName = await download("cert-wait.pdf");
 await page.waitForTimeout(500);
 ok("대기시간 PDF를 내려받는다", true, fileName);
-ok("파일명이 한글로 나온다", /확인서/.test(fileName) && fileName.endsWith(".pdf"), fileName);
+const savedName = (await page.evaluate(() => window.__downloadNames.at(-1))) ?? "";
+ok("파일명을 한글 서식 이름 · 입차 날짜 · 차량번호로 짓는다",
+   savedName === `컨테이너대기시간확인서_2026-03-04_${SECRET.vehicle}.pdf`, savedName);
 await page.screenshot({ path: path.join(OUT, "4-done.png"), fullPage: true });
 
 // ── 나머지 두 종류 ───────────────────────────────────────────────────
-for (const [label, file, fill] of [
-  ["험로 · 오지 확인서", "cert-rough.pdf", async () => {
-    await page.fill("#f-sectionFrom", "국도 59호선 오미재 삼거리");
-    await page.fill("#f-sectionTo", "강원 정선군 임계면 골지천");
-    await page.getByRole("button", { name: "비포장" }).click();
-    await page.getByRole("button", { name: "급경사" }).click();
+for (const [label, file, fill, after] of [
+  ["험로·오지 확인서", "cert-rough.pdf", async () => {
+    await page.fill("#f-siteName", "강원 정선 레미콘 현장");
+    await page.fill("#f-vehicleNo", "81버9900");
+    await page.fill("#f-occurredAt", "2026-03-06T09:20");
+    await page.getByRole("button", { name: "비포장, 자갈길 등 불량도로" }).click();
+    await page.getByRole("button", { name: "급경사 구간" }).click();
+  }, async () => {
+    const text = await page.locator("body").innerText();
+    ok("험로·오지 확인서에는 서명 의무 조항을 붙이지 않는다", !text.includes("서명 의무 조항"));
   }],
   ["컨테이너 세척 · 손상 교체 확인서", "cert-wash.pdf", async () => {
-    await page.getByRole("button", { name: "세척", exact: true }).click();
+    await page.fill("#f-siteName", "부산 신항 세척장");
     await page.fill("#f-containerNo", "ABCU1234567");
-    await page.fill("#f-place", "부산 신항 세척장");
+    await page.fill("#f-vehicleNo", "12가3456");
+    await page.fill("#f-occurredAt", "2026-03-07T13:05");
+  }, async () => {
+    const text = await page.locator("body").innerText();
+    ok("세척 확인서에는 지시자의 서명 의무 조항이 나온다",
+       text.includes("서명 의무 조항") && text.includes("별표 1 18.가."));
   }],
 ]) {
   await page.getByRole("button", { name: "확인서 하나 더 만들기" }).click();
   await page.getByRole("button", { name: new RegExp(label.replace(/[·.]/g, ".")) }).click();
   await fill();
   await page.getByRole("button", { name: "서명 받기" }).click();
-  await page.waitForSelector("#signer-name");
-  await page.fill("#signer-name", "이순신");
+  await page.waitForSelector("#f-confirmerName");
+  await after();
+  await page.fill("#f-confirmerName", "이순신");
   await sign();
   const name = await download(file);
   ok(`${label} PDF를 내려받는다`, true, name);
@@ -198,6 +266,32 @@ ok("카운터가 보내는 값은 종류와 재사용 구간뿐이다",
 const kinds = counterBodies.map((b) => { try { return JSON.parse(b).kind; } catch { return "?"; } });
 ok("확인서 3종이 각각 한 번씩 집계됐다",
    JSON.stringify(kinds) === JSON.stringify(["WAIT", "ROUGH_ROAD", "WASH_SWAP"]), kinds.join(","));
+
+// ── 만들어진 PDF를 다시 열어 본다 ────────────────────────────────────
+const waitPdf = path.join(OUT, "cert-wait.pdf");
+const waitText = await pdfText(waitPdf);
+
+ok("PDF 제목이 별지 서식의 제목이다", waitText.includes("컨테이너 대기시간 확인서"), waitText.slice(0, 80));
+ok("PDF에 별지 서식 번호가 찍힌다", waitText.includes("[별지 제4호서식]"));
+ok("PDF에 입차요청시각 칸이 있다", waitText.includes("입차요청시각(화주)"));
+ok("날짜가 바뀐 대기를 서식 표기 그대로 찍는다",
+   waitText.includes("2026년 3월 4일 21시 30분") && waitText.includes("2026년 3월 5일 01시 45분"),
+   waitText.match(/2026년 3월 [45]일[^)]{0,20}/g)?.join(" | "));
+ok("PDF에 고시의 확인 문구와 근거 조항이 들어간다",
+   waitText.includes("별표 1 24.다.") && waitText.includes("상호 보완하여 사용할 수 있습니다"));
+ok("PDF에 서식의 참고 설명이 들어간다", waitText.includes("입차요청시각 : 화주가 상·하차지에 입차를 요청한 시각"));
+ok("계산하지 않은 자리는 PDF에도 미지원으로 남는다", waitText.includes("미지원"));
+ok("다 채운 서식에는 (미기재)가 없다", !waitText.includes("(미기재)"), waitText.slice(0, 120));
+
+const roughText = await pdfText(path.join(OUT, "cert-rough.pdf"));
+ok("고른 항목은 채운 네모로 찍힌다", roughText.includes("\u25a0 비포장, 자갈길 등 불량도로"), roughText.slice(0, 120));
+ok("고르지 않은 항목도 빈 네모로 남는다", roughText.includes("\u25a1 당사자 간 합의하는 경우"));
+ok("적지 않은 칸은 (미기재)로 찍힌다", roughText.includes("(미기재)"));
+
+// 폰트를 통째로 임베드했는지를 크기로 본다. subset: true로 바뀌면 한글이 빈칸이 되면서
+// 크기가 뚝 떨어진다. 글자 추출만으로는 그 사고를 잡지 못한다.
+const size = await pdfBytes(waitPdf);
+ok("한글 폰트를 통째로 임베드한다", size > 600_000, `${Math.round(size / 1024)}KB`);
 
 ok("자바스크립트 오류가 없다", pageErrors.length === 0, pageErrors.join(" | "));
 

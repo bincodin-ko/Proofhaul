@@ -1,6 +1,6 @@
 "use client";
 
-import type { Field } from "@/lib/certs";
+import { joinPicked, splitPicked, type Field } from "@/lib/certs";
 
 interface Props {
   field: Field;
@@ -8,20 +8,20 @@ interface Props {
   onChange: (value: string) => void;
 }
 
-/** 모든 값은 문자열로 다룬다. 다중 선택은 ", "로 이어 붙인다. */
+/** 모든 값은 문자열로 다룬다. 다중 선택은 MULTI_SEP로 이어 붙인다. */
 export default function FieldInput({ field, value, onChange }: Props) {
   const id = `f-${field.key}`;
   const wide = field.wide ? "span-2" : "";
 
   if (field.type === "checks" || field.type === "radio") {
-    const selected = value ? value.split(", ").filter(Boolean) : [];
+    const selected = splitPicked(value);
     const multi = field.type === "checks";
     const toggle = (option: string) => {
       if (!multi) return onChange(selected[0] === option ? "" : option);
       const next = selected.includes(option)
         ? selected.filter((s) => s !== option)
-        : [...(field.options ?? []).filter((o) => selected.includes(o) || o === option)];
-      onChange(next.join(", "));
+        : (field.options ?? []).filter((o) => selected.includes(o) || o === option);
+      onChange(joinPicked(next));
     };
     return (
       <div className={`sign-field ${wide}`}>
@@ -64,8 +64,10 @@ export default function FieldInput({ field, value, onChange }: Props) {
       ) : (
         <input
           id={id}
-          type={field.type}
-          step={field.type === "time" ? 300 : undefined}
+          // 서식은 시각을 "2026년 __월 __일 __시 __분"으로 받는다. 시:분만 받으면
+          // 날짜가 바뀌는 대기(야간 상차 등)를 적을 수 없다.
+          type={field.type === "datetime" ? "datetime-local" : field.type}
+          step={field.type === "datetime" ? 60 : undefined}
           value={value}
           placeholder={field.placeholder}
           inputMode={field.type === "tel" ? "tel" : undefined}

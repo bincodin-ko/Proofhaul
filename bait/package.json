@@ -21,7 +21,8 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "typescript": "^5.7.0",
-    "playwright": "^1.49.0"
+    "pdfjs-dist": "^6.3.289",
+    "playwright": "^1.49.0",
+    "typescript": "^5.7.0"
   }
 }

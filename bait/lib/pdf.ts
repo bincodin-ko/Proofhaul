@@ -6,7 +6,7 @@
 
 import { PDFDocument, PDFFont, PDFPage, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
-import { CertType, COMMON_FIELDS, DISCLAIMER, Field } from "./certs";
+import { CertType, DISCLAIMER, Field, OfficialForm, splitPicked } from "./certs";
 
 const FONT_URL = "/fonts/NanumGothic-Regular.ttf";
 
@@ -37,12 +37,24 @@ export function loadFontBytes(): Promise<ArrayBuffer> {
 
 export interface CertDoc {
   cert: CertType;
-  common: Record<string, string>;
-  detail: Record<string, string>;
-  signerName: string;
-  signerRole: string;
+  /** 어느 별지 서식으로 인쇄할지. 항목과 문구가 전부 여기서 나온다. */
+  form: OfficialForm;
+  values: Record<string, string>;
+  confirmerOrg: string;
+  confirmerName: string;
   signaturePng: string;
   createdAt: Date;
+}
+
+/**
+ * datetime-local 값("2026-03-04T14:02")을 서식의 표기로 바꾼다.
+ * 서식은 "2026년 __월 __일 __시 __분" 칸이다. 빈 값은 빈 문자열로 둔다.
+ */
+export function formatFormDateTime(raw: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(raw.trim());
+  if (!m) return raw.trim();
+  const [, y, mo, d, h, mi] = m;
+  return `${y}년 ${Number(mo)}월 ${Number(d)}일 ${h}시 ${mi}분`;
 }
 
 /**
@@ -121,14 +133,17 @@ class Cursor {
   }
 }
 
+/** 서식에 인쇄된 항목명을 그대로 쓴다. 우리가 줄이지 않는다. */
 function label(field: Field) {
-  return field.label.replace(/ \(.*\)$/, "");
+  return field.label.replace(/ \(/, "(");
 }
 
-function collect(fields: Field[], values: Record<string, string>) {
-  return fields
-    .map((f) => ({ field: f, value: (values[f.key] ?? "").trim() }))
-    .filter((row) => row.value.length > 0);
+/** 항목 값을 서식 표기로 바꾼다. 체크 항목은 아래 renderChecks가 따로 그린다. */
+function displayValue(field: Field, raw: string): string {
+  const value = raw.trim();
+  if (!value) return "";
+  if (field.type === "datetime") return formatFormDateTime(value);
+  return value;
 }
 
 export async function buildCertPdf(doc: CertDoc): Promise<Blob> {
@@ -145,53 +160,85 @@ export async function buildCertPdf(doc: CertDoc): Promise<Blob> {
   // 값: PDF 한 장이 약 750KB가 된다. 글자가 사라지는 것보다 낫다.
   const font = await pdf.embedFont(fontBytes, { subset: false });
 
-  pdf.setTitle(doc.cert.title);
+  pdf.setTitle(doc.form.title);
   pdf.setProducer("안전운임 확인서 생성기");
   pdf.setCreator("안전운임 확인서 생성기");
   pdf.setCreationDate(doc.createdAt);
 
   const c = new Cursor(pdf, font);
+  const form = doc.form;
 
-  // 제목
-  c.y -= 14;
+  // 서식 머리 — 실제 별지 서식과 같은 줄을 같은 자리에 둔다.
+  c.text(`\u25a0 2026년 적용 화물자동차 안전운임 고시 [${form.no}]`, { size: 8.5, color: MUTED });
+  c.y -= 24;
+
   const titleSize = 19;
-  const titleW = font.widthOfTextAtSize(doc.cert.title, titleSize);
-  c.text(doc.cert.title, { x: (A4.w - titleW) / 2, size: titleSize, bold: true });
+  const titleW = font.widthOfTextAtSize(form.title, titleSize);
+  c.text(form.title, { x: (A4.w - titleW) / 2, size: titleSize, bold: true });
   c.y -= 16;
   c.rule(INK);
-  c.y -= 26;
-
-  const section = (heading: string) => {
-    c.need(46);
-    c.text(heading, { size: 11, bold: true });
-    c.y -= 8;
-    c.rule();
-    c.y -= 16;
-  };
+  c.y -= 24;
 
   const row = (name: string, value: string) => {
-    const valueW = c.width - LABEL_W;
-    const lines = wrap(value, font, 10, valueW);
+    const filled = value.length > 0;
+    const lines = wrap(filled ? value : "(미기재)", font, 10, c.width - LABEL_W);
     c.need(lines.length * 15 + 6);
     c.text(name, { size: 9.5, color: MUTED });
     lines.forEach((line, i) => {
-      c.page.drawText(line, { x: MARGIN + LABEL_W, y: c.y, size: 10, font, color: INK });
+      c.page.drawText(line, {
+        x: MARGIN + LABEL_W, y: c.y, size: 10, font, color: filled ? INK : MUTED,
+      });
       if (i < lines.length - 1) c.y -= 15;
     });
     c.y -= 21;
   };
 
-  section("운송 건 정보");
-  for (const { field, value } of collect(COMMON_FIELDS, doc.common)) row(label(field), value);
+  // 체크 항목은 서식처럼 보기를 전부 인쇄하고 고른 것만 채운다.
+  // 고른 것만 인쇄하면 무엇을 고르지 않았는지가 사라진다.
+  const checks = (field: Field, picked: string[]) => {
+    const options = field.options ?? [];
+    c.need(options.length * 14 + 10);
+    c.text(label(field), { size: 9.5, color: MUTED });
+    options.forEach((option, i) => {
+      const mark = picked.includes(option) ? "\u25a0" : "\u25a1";
+      c.page.drawText(`${mark} ${option}`, {
+        x: MARGIN + LABEL_W, y: c.y, size: 10, font, color: INK,
+      });
+      if (i < options.length - 1) c.y -= 14;
+    });
+    c.y -= 20;
+  };
 
-  c.y -= 8;
-  section("확인 사항");
-  const detailRows = collect(doc.cert.fields, doc.detail);
-  if (detailRows.length === 0) {
-    row("내용", "기재 없음");
-  } else {
-    for (const { field, value } of detailRows) row(label(field), value);
+  for (const field of [...form.header, ...form.body]) {
+    const raw = doc.values[field.key] ?? "";
+    if (field.type === "checks" || field.type === "radio") {
+      checks(field, splitPicked(raw));
+    } else {
+      row(label(field), displayValue(field, raw));
+    }
   }
+
+  // 확인 문구 — 고시 서식의 문장 그대로. 우리가 고쳐 쓰지 않는다.
+  c.y -= 2;
+  c.rule();
+  c.y -= 18;
+  for (const line of wrap(form.statement, font, 9, c.width)) {
+    c.need(14);
+    c.text(line, { size: 9 });
+    c.y -= 13;
+  }
+
+  if (form.notes?.length) {
+    c.y -= 6;
+    c.need(16 + form.notes.length * 12);
+    c.text("* 참고", { size: 8.5, color: MUTED });
+    c.y -= 13;
+    for (const note of form.notes) {
+      c.text(note, { x: MARGIN + 10, size: 8.5, color: MUTED });
+      c.y -= 12;
+    }
+  }
+  c.y -= 12;
 
   // 계산하지 않은 자리를 빈칸이나 0으로 두지 않는다. "미지원"이라고 인쇄한다.
   if (doc.cert.unsupported) {
@@ -213,10 +260,10 @@ export async function buildCertPdf(doc: CertDoc): Promise<Blob> {
     c.y -= 14;
   }
 
-  c.y -= 8;
-  section("서명");
-  row("서명자", `${doc.signerName} (${doc.signerRole})`);
-  row("서명 시각", formatStamp(doc.createdAt));
+  c.y -= 4;
+  row("작성일", formatFormDate(doc.createdAt));
+  row("확인자 소속", doc.confirmerOrg);
+  row("확인자 성명", doc.confirmerName);
 
   const sigH = 88;
   c.need(sigH + 20);
@@ -231,6 +278,10 @@ export async function buildCertPdf(doc: CertDoc): Promise<Blob> {
     y: c.y - sigH + (sigH - png.height * scale) / 2,
     width: png.width * scale,
     height: png.height * scale,
+  });
+  c.page.drawText("(서명 또는 인)", {
+    x: A4.w - MARGIN - 16 - font.widthOfTextAtSize("(서명 또는 인)", 8.5),
+    y: c.y - sigH + 10, size: 8.5, font, color: MUTED,
   });
   c.y -= sigH + 24;
 
@@ -253,8 +304,15 @@ export function formatStamp(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+/** 서식의 작성일 칸은 "2026년 __월 __일"이다. */
+export function formatFormDate(d: Date): string {
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+}
+
 export function fileNameFor(doc: CertDoc): string {
-  const date = (doc.common.shippedOn || "").trim() || doc.createdAt.toISOString().slice(0, 10);
-  const who = (doc.common.vehicleNo || "").trim().replace(/[\\/:*?"<>|\s]/g, "");
-  return [doc.cert.title.replace(/\s/g, ""), date, who].filter(Boolean).join("_") + ".pdf";
+  // 파일명의 날짜는 입차시각(없으면 일시, 그것도 없으면 만든 날)에서 가져온다.
+  const source = (doc.values.entryAt || doc.values.occurredAt || "").trim();
+  const date = source.slice(0, 10) || doc.createdAt.toISOString().slice(0, 10);
+  const who = (doc.values.vehicleNo || "").trim().replace(/[\\/:*?"<>|\s]/g, "");
+  return [doc.form.title.replace(/\s/g, ""), date, who].filter(Boolean).join("_") + ".pdf";
 }

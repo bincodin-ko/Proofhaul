@@ -8,7 +8,10 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-const ROOT = process.env.STORAGE_DIR ?? path.join(process.cwd(), ".storage");
+// ?? 는 빈 문자열을 그대로 통과시킨다. .env.example이 STORAGE_DIR= 로 비워 두고 있어서,
+// 그대로 따라 하면 ROOT가 ""가 되고 서명 이미지가 저장소 대신 작업 디렉터리 밑에
+// signatures/ 로 떨어졌다. 비어 있으면 없는 것으로 친다.
+const ROOT = process.env.STORAGE_DIR?.trim() || path.join(process.cwd(), ".storage");
 
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 

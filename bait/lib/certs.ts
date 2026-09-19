@@ -296,6 +296,13 @@ export function resolveForm(cert: CertType, variantLabel: string): OfficialForm 
   return OFFICIAL_FORMS[hit.form];
 }
 
+/** 별지 서식이 어느 확인서 묶음에 속하는지. 링크로 들어왔을 때 "미지원" 문구를 찾는 데 쓴다. */
+export function certForForm(formId: FormId): CertType {
+  const found = CERT_TYPES.find((c) => c.pick.variants.some((v) => v.form === formId));
+  if (!found) throw new Error(`no cert type for form: ${formId}`);
+  return found;
+}
+
 export function formFields(form: OfficialForm): Field[] {
   return [...form.header, ...form.body];
 }

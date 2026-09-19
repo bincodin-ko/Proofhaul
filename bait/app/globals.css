@@ -269,3 +269,52 @@ input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--miss);
 .bait-bar .back:hover{color:var(--action)}
 .bait-bar .crumb{font-size:16px;font-weight:700}
 .bait-bar .step{margin-left:auto;font-size:15px;color:var(--ink-3)}
+
+/* ---------- 내가 만든 확인서 목록 (이 폰 안에만 있는 기록) ---------- */
+.doc-list{display:grid;gap:10px}
+.doc-row{
+  display:grid;
+  grid-template-columns:1fr auto;
+  grid-template-areas:"main status" "actions actions";
+  gap:8px 10px;
+  align-items:start;
+  border:1px solid var(--line);border-radius:var(--r-2);
+  background:var(--surface);
+  padding:13px 14px;
+}
+.doc-row .doc-main{grid-area:main;min-width:0}
+.doc-row .doc-title{font-size:17px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}
+.doc-row .doc-meta{margin-top:3px;font-size:14px;color:var(--ink-3);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.doc-row .doc-status{
+  grid-area:status;white-space:nowrap;
+  border:1px solid var(--line);border-radius:var(--r-1);
+  padding:3px 8px;font-size:13px;font-weight:700;
+}
+.doc-row .doc-status.s-signed{background:var(--signed-bg);color:var(--signed);border-color:var(--signed-line)}
+.doc-row .doc-status.s-requested{background:var(--req-bg);color:var(--req);border-color:var(--req-line)}
+.doc-row .doc-status.s-received{background:var(--surface);color:var(--ink-2);border-color:var(--line)}
+.doc-row .doc-actions{grid-area:actions;display:flex;flex-wrap:wrap;gap:8px}
+.doc-row .doc-actions .btn{min-height:44px;font-size:15px}
+
+/* ---------- 링크로 들어온 화주가 보는 내용 요약 ---------- */
+.doc-summary{border:1px solid var(--line);border-radius:var(--r-2);overflow:hidden}
+.doc-summary .ds-row{
+  display:grid;grid-template-columns:minmax(96px,34%) 1fr;gap:12px;
+  padding:11px 14px;border-bottom:1px solid var(--line);
+}
+.doc-summary .ds-row:last-child{border-bottom:0}
+.doc-summary .ds-label{font-size:15px;color:var(--ink-3);line-height:1.5}
+.doc-summary .ds-value{font-size:16px;font-weight:600;line-height:1.5;overflow-wrap:anywhere;white-space:pre-line}
+.doc-summary .ds-value.empty{font-weight:400;color:var(--ink-3)}
+
+/* ---------- 서명 요청 링크 ---------- */
+.link-box{
+  margin-top:10px;
+  border:1px solid var(--line);border-radius:var(--r-2);
+  background:var(--surface);
+  padding:12px 14px;
+  font-size:13px;line-height:1.5;color:var(--ink-2);
+  overflow-wrap:anywhere;
+  max-height:132px;overflow-y:auto;
+  user-select:all;
+}

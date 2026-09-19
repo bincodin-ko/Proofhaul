@@ -4,6 +4,10 @@
 // 특히 "개인정보를 서버로 보내지 않는다"는 화면만 봐서는 확인할 수 없으므로,
 // 흐름 내내 나가는 요청을 전부 붙잡아 입력값이 섞여 나가는지 본다.
 //
+// 링크 서명은 **기기 두 대**로 확인한다. 화주 쪽 브라우저 컨텍스트를 따로 열어서,
+// 기사 폰에 저장된 것 없이 링크만으로 서명이 되는지 본다. 같은 탭에서 확인하면
+// localStorage를 공유하게 되어 "링크만으로 된다"를 증명하지 못한다.
+//
 //   npm run build && npm start &
 //   node tests/e2e/run.mjs
 
@@ -23,151 +27,163 @@ const SECRET = {
   vehicle: "12가3456",
   driver: "김철수",
   signer: "박영희",
-  note: "하차 대기 중 현장 지시로 3번 게이트 앞에서 대기. 희귀 음절: 뷁 쀍 똠 짊 옰 휭 ※ ₩ ABC 123",
+  guestSigner: "이순신",
+  site2: "부산신항 3부두 야적장",
 };
 
 const results = [];
-const ok = (check, pass, detail) => results.push({ check, pass, detail: detail?.slice(0, 160) });
+const ok = (check, pass, detail) => results.push({ check, pass, detail: String(detail ?? "").slice(0, 160) });
 
 await fs.mkdir(OUT, { recursive: true });
 const browser = await chromium.launch({ executablePath: CHROME }).catch(() => chromium.launch());
-const ctx = await browser.newContext({ ...devices["iPhone 13"], acceptDownloads: true, locale: "ko-KR" });
-const page = await ctx.newPage();
 
-await ctx.addInitScript(() => {
-  // 우리가 붙인 파일명을 그대로 붙잡는다.
+// 나가는 요청을 전부 기록한다 — 주소, 메서드, 본문. 컨텍스트 두 개 모두에서.
+const outbound = [];
+const bodyReads = [];
+const pageErrors = [];
+
+// 공유 기능은 폰에만 있다. 여기서는 없는 셈 치고 내려받기 경로를 돈다.
+// (공유 경로는 맨 마지막에 따로 흉내 내서 확인한다.)
+const INIT = () => {
   const original = HTMLAnchorElement.prototype.click;
   window.__downloadNames = [];
   HTMLAnchorElement.prototype.click = function () {
     if (this.download) window.__downloadNames.push(this.download);
     return original.apply(this, arguments);
   };
-});
-
-const pageErrors = [];
-page.on("pageerror", (e) => pageErrors.push(String(e)));
-page.on("console", (m) => { if (m.type() === "error") pageErrors.push("console: " + m.text()); });
-
-// 나가는 요청을 전부 기록한다 — 주소, 메서드, 본문.
-const outbound = [];
-ctx.on("request", (r) => {
-  outbound.push({ method: r.method(), url: r.url(), body: r.postData() ?? "" });
-});
-
-// 카운터는 navigator.sendBeacon(Blob)으로 나간다. Playwright의 request.postData()는
-// Blob 본문에 null을 주기 때문에, 그것만 믿으면 "본문에 입력값이 없다"를 **읽지도
-// 않고** 통과시키게 된다. 그래서 CDP로 한 겹 더 잡는다.
-// Blob 본문은 requestWillBeSent 이벤트에 실려 오지 않는다. hasPostData 표시만 오고,
-// 본문은 Network.getRequestPostData 로 따로 받아와야 한다.
-const cdp = await ctx.newCDPSession(page);
-await cdp.send("Network.enable");
-const bodyReads = [];
-cdp.on("Network.requestWillBeSent", ({ requestId, request }) => {
-  if (request.method === "GET") return;
-  const record = { method: request.method, url: request.url, body: request.postData ?? "", via: "cdp" };
-  outbound.push(record);
-  if (!record.body && request.hasPostData) {
-    bodyReads.push(
-      cdp.send("Network.getRequestPostData", { requestId })
-        .then(({ postData }) => { record.body = postData ?? ""; })
-        .catch(() => {}),
-    );
+  try {
+    delete Navigator.prototype.share;
+    delete Navigator.prototype.canShare;
+  } catch {
+    /* 무시 */
   }
-});
+};
 
-async function sign() {
-  // 서명 화면이 확인 문구만큼 길어졌다. 서명란이 화면 밖에 있으면 좌표가 어긋나
-  // 아무 데도 그려지지 않는다. 먼저 보이는 자리로 끌어온다.
-  await page.locator("canvas.sign-pad").evaluate((el) => el.scrollIntoView({ block: "center" }));
-  await page.waitForTimeout(200);
-  const box = await page.locator("canvas.sign-pad").boundingBox();
-  // 붙박이 버튼 바가 서명란을 덮으면 손가락이 그림 대신 버튼을 누른다.
-  const bar = await page.locator(".sign-actionbar").boundingBox();
-  ok("서명란이 버튼 바에 가리지 않는다",
-     box.y + box.height <= bar.y + 0.5,
-     `서명란 ${Math.round(box.y)}~${Math.round(box.y + box.height)} / 버튼 바 ${Math.round(bar.y)}부터`);
-  await page.mouse.move(box.x + 30, box.y + box.height * 0.65);
-  await page.mouse.down();
-  for (let i = 0; i <= 50; i++) {
-    const t = i / 50;
-    await page.mouse.move(box.x + 30 + t * (box.width - 70),
-                          box.y + box.height * (0.62 - Math.sin(t * Math.PI * 2.4) * 0.24));
-  }
-  await page.mouse.up();
-  await page.waitForTimeout(120);
+async function makeContext() {
+  const context = await browser.newContext({ ...devices["iPhone 13"], acceptDownloads: true, locale: "ko-KR" });
+  await context.addInitScript(INIT);
+  context.on("request", (r) => outbound.push({ method: r.method(), url: r.url(), body: r.postData() ?? "" }));
+  const p = await context.newPage();
+  p.on("pageerror", (e) => pageErrors.push(String(e)));
+  p.on("console", (m) => { if (m.type() === "error") pageErrors.push("console: " + m.text()); });
+
+  // 카운터는 navigator.sendBeacon(Blob)으로 나간다. Playwright의 request.postData()는
+  // Blob 본문에 null을 주기 때문에, 그것만 믿으면 "본문에 입력값이 없다"를 **읽지도
+  // 않고** 통과시키게 된다. 그래서 CDP로 한 겹 더 잡는다.
+  const cdp = await context.newCDPSession(p);
+  await cdp.send("Network.enable");
+  cdp.on("Network.requestWillBeSent", ({ requestId, request }) => {
+    if (request.method === "GET") return;
+    const record = { method: request.method, url: request.url, body: request.postData ?? "", via: "cdp" };
+    outbound.push(record);
+    if (!record.body && request.hasPostData) {
+      bodyReads.push(
+        cdp.send("Network.getRequestPostData", { requestId })
+          .then(({ postData }) => { record.body = postData ?? ""; })
+          .catch(() => {}),
+      );
+    }
+  });
+  return { context, page: p };
 }
 
-async function download(name) {
+const { context: ctx, page } = await makeContext();
+
+async function signOn(target, label) {
+  // 서명 화면이 확인 문구만큼 길어졌다. 서명란이 화면 밖에 있으면 좌표가 어긋나
+  // 아무 데도 그려지지 않는다. 먼저 보이는 자리로 끌어온다.
+  await target.locator("canvas.sign-pad").evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await target.waitForTimeout(200);
+  const box = await target.locator("canvas.sign-pad").boundingBox();
+  // 붙박이 버튼 바가 서명란을 덮으면 손가락이 그림 대신 버튼을 누른다.
+  const bar = await target.locator(".sign-actionbar").boundingBox();
+  ok(`서명란이 버튼 바에 가리지 않는다 (${label})`,
+     box.y + box.height <= bar.y + 0.5,
+     `서명란 ${Math.round(box.y)}~${Math.round(box.y + box.height)} / 버튼 바 ${Math.round(bar.y)}부터`);
+  await target.mouse.move(box.x + 30, box.y + box.height * 0.65);
+  await target.mouse.down();
+  for (let i = 0; i <= 50; i++) {
+    const t = i / 50;
+    await target.mouse.move(box.x + 30 + t * (box.width - 70),
+                            box.y + box.height * (0.62 - Math.sin(t * Math.PI * 2.4) * 0.24));
+  }
+  await target.mouse.up();
+  await target.waitForTimeout(120);
+}
+
+async function downloadOn(target, name) {
   try {
     const [dl] = await Promise.all([
-      page.waitForEvent("download", { timeout: 30000 }),
-      page.getByRole("button", { name: "PDF 내려받기" }).click(),
+      target.waitForEvent("download", { timeout: 30000 }),
+      target.getByRole("button", { name: "서명 완료 · PDF 만들기" }).click(),
     ]);
     await dl.saveAs(path.join(OUT, name));
     return dl.suggestedFilename();
   } catch (e) {
     // 화면이 막아 세운 이유를 그대로 들고 나온다. 타임아웃만 보면 원인을 알 수 없다.
-    const why = await page.locator(".sign-actionbar .why").textContent().catch(() => null);
+    const why = await target.locator(".sign-actionbar .why").textContent().catch(() => null);
     throw new Error(`${name} 내려받기 실패 — 화면 메시지: ${why ?? "(없음)"} / ${e.message.split("\n")[0]}`);
   }
+}
+
+/** 화주 쪽은 서명 → 완료 화면 → "보내기"에서 파일이 나온다. 한 번에 안 떨어진다. */
+async function downloadGuest(target, name) {
+  await target.getByRole("button", { name: "서명 완료 · PDF 만들기" }).click();
+  await target.waitForSelector("text=서명이 끝났습니다", { timeout: 30000 });
+  const [dl] = await Promise.all([
+    target.waitForEvent("download", { timeout: 30000 }),
+    target.getByRole("button", { name: /PDF 보내기/ }).click(),
+  ]);
+  await dl.saveAs(path.join(OUT, name));
+  return dl.suggestedFilename();
+}
+
+const sign = (label) => signOn(page, label);
+const download = (name) => downloadOn(page, name);
+
+async function fillWaitForm(site) {
+  await page.fill("#f-siteName", site);
+  await page.fill("#f-siteLocation", "경기 평택시 포승읍 평택항만길");
+  await page.fill("#f-containerNo", "ABCU1234567");
+  await page.fill("#f-vehicleNo", SECRET.vehicle);
+  await page.fill("#f-driverName", SECRET.driver);
+  await page.fill("#f-carrierName", SECRET.carrier);
+  await page.fill("#f-requestedEntryAt", "2026-03-04T21:30");
+  await page.fill("#f-entryAt", "2026-03-04T22:10");
+  await page.fill("#f-exitAt", "2026-03-05T01:45");
 }
 
 // ── 첫 화면 ──────────────────────────────────────────────────────────
 await page.goto(BASE, { waitUntil: "networkidle" });
 ok("첫 화면에서 2MB 폰트를 받지 않는다",
    !(await page.evaluate(() => performance.getEntriesByType("resource").some((r) => r.name.includes("NanumGothic")))));
-ok("확인서 3종이 모두 있다",
-   (await page.locator(".pick button").count()) === 3,
-   String(await page.locator(".pick button").count()));
+ok("확인서 3종이 모두 있다", (await page.locator(".pick button").count()) === 3);
+ok("아무것도 만들기 전에는 목록이 없다", (await page.locator("[data-testid=doc-list]").count()) === 0);
 await page.screenshot({ path: path.join(OUT, "1-pick.png"), fullPage: true });
 
 // ── 대기시간 확인서 (별지 제4호서식) ────────────────────────────────
 await page.getByRole("button", { name: /대기시간 확인서/ }).click();
 await page.waitForSelector("#f-requestedEntryAt");
+ok("고른 별지 서식 번호가 화면에 뜬다", (await page.locator("body").innerText()).includes("별지 제4호서식"));
 
-ok("고른 별지 서식 번호가 화면에 뜬다",
-   (await page.locator("body").innerText()).includes("별지 제4호서식"));
-
-await page.fill("#f-siteName", SECRET.shipper);
-await page.fill("#f-siteLocation", "경기 평택시 포승읍 평택항만길");
-await page.fill("#f-containerNo", "ABCU1234567");
-await page.fill("#f-vehicleNo", SECRET.vehicle);
-await page.fill("#f-driverName", SECRET.driver);
-await page.fill("#f-carrierName", SECRET.carrier);
-
-// 서식은 년·월·일·시·분을 받는다. 날짜가 바뀌는 대기를 그대로 적을 수 있어야 한다.
-await page.fill("#f-requestedEntryAt", "2026-03-04T21:30");
-await page.fill("#f-entryAt", "2026-03-04T22:10");
-await page.fill("#f-exitAt", "2026-03-05T01:45");
-
-ok("대기료 계산란이 '미지원'으로 뜬다",
-   (await page.locator("body").innerText()).includes("미지원"));
+await fillWaitForm(SECRET.shipper);
+ok("대기료 계산란이 '미지원'으로 뜬다", (await page.locator("body").innerText()).includes("미지원"));
 ok("가로 스크롤이 없다",
    await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth));
 
 // 품목을 시멘트로 바꾸면 별지 제6호서식이 되고, 서식에 없는 칸은 사라진다.
 await page.getByRole("button", { name: "시멘트", exact: true }).click();
 await page.waitForTimeout(150);
-const cementText = await page.locator("body").innerText();
-ok("품목을 바꾸면 별지 제6호서식으로 바뀐다", cementText.includes("별지 제6호서식"));
+ok("품목을 바꾸면 별지 제6호서식으로 바뀐다", (await page.locator("body").innerText()).includes("별지 제6호서식"));
 ok("제6호서식에는 컨테이너번호 칸이 없다", (await page.locator("#f-containerNo").count()) === 0);
 ok("제6호서식에는 운수사 명 칸이 없다", (await page.locator("#f-carrierName").count()) === 0);
 await page.getByRole("button", { name: "수출입 컨테이너", exact: true }).click();
 await page.waitForSelector("#f-containerNo");
-
-// 서식을 바꾸면 입력값을 비운다. 다시 채운다.
-await page.fill("#f-siteLocation", "경기 평택시 포승읍 평택항만길");
-await page.fill("#f-containerNo", "ABCU1234567");
-await page.fill("#f-vehicleNo", SECRET.vehicle);
-await page.fill("#f-driverName", SECRET.driver);
-await page.fill("#f-carrierName", SECRET.carrier);
-await page.fill("#f-requestedEntryAt", "2026-03-04T21:30");
-await page.fill("#f-entryAt", "2026-03-04T22:10");
-await page.fill("#f-exitAt", "2026-03-05T01:45");
+await fillWaitForm(SECRET.shipper);
 
 // 폰트에 없는 글자는 서명 전에 막는다
 await page.fill("#f-siteName", "株式會社 제일물류센터");
-await page.getByRole("button", { name: "서명 받기" }).click();
+await page.getByRole("button", { name: "여기서 서명받기" }).click();
 await page.waitForTimeout(300);
 const guard = await page.locator(".sign-actionbar .why").textContent().catch(() => null);
 ok("폰트에 없는 한자를 서명 전에 막는다",
@@ -176,9 +192,8 @@ ok("막힌 상태에서 서명 단계로 넘어가지 않는다", (await page.lo
 
 await page.fill("#f-siteName", SECRET.shipper);
 await page.screenshot({ path: path.join(OUT, "2-form.png"), fullPage: true });
-await page.getByRole("button", { name: "서명 받기" }).click();
+await page.getByRole("button", { name: "여기서 서명받기" }).click();
 await page.waitForSelector("#f-confirmerName");
-ok("드문 한글 음절은 통과한다", true);
 
 const signText = await page.locator("body").innerText();
 ok("서명 화면에 고시의 확인 문구가 그대로 나온다",
@@ -188,33 +203,102 @@ ok("서명 화면에 화주의 서명 의무 조항이 나온다",
 
 await page.fill("#f-confirmerOrg", "평택항 제일물류센터 운영팀");
 await page.fill("#f-confirmerName", SECRET.signer);
-await sign();
+await sign("현장");
 await page.screenshot({ path: path.join(OUT, "3-sign.png"), fullPage: true });
-
-const fileName = await download("cert-wait.pdf");
+await download("cert-wait.pdf");
 await page.waitForTimeout(500);
-ok("대기시간 PDF를 내려받는다", true, fileName);
+
 const savedName = (await page.evaluate(() => window.__downloadNames.at(-1))) ?? "";
 ok("파일명을 한글 서식 이름 · 입차 날짜 · 차량번호로 짓는다",
    savedName === `컨테이너대기시간확인서_2026-03-04_${SECRET.vehicle}.pdf`, savedName);
 await page.screenshot({ path: path.join(OUT, "4-done.png"), fullPage: true });
 
+// ── 이 폰에 남는 기록 ────────────────────────────────────────────────
+await page.getByRole("button", { name: "확인서 하나 더 만들기" }).click();
+await page.waitForSelector("[data-testid=doc-list]");
+const listText = await page.locator("[data-testid=doc-list]").innerText();
+ok("만든 확인서가 목록에 남는다", listText.includes(SECRET.shipper), listText);
+ok("목록에 '서명 완료' 상태가 보인다", listText.includes("서명 완료"));
+ok("목록이 이 폰에만 있다고 알려준다", listText.includes("이 폰 안에만"));
+await page.screenshot({ path: path.join(OUT, "5-home-list.png"), fullPage: true });
+
+// ── 두 번째 확인서: 내 정보가 자동으로 채워진다 ──────────────────────
+await page.getByRole("button", { name: /대기시간 확인서/ }).click();
+await page.waitForSelector("#f-requestedEntryAt");
+ok("차량번호가 자동으로 채워진다", (await page.inputValue("#f-vehicleNo")) === SECRET.vehicle);
+ok("차주 성명이 자동으로 채워진다", (await page.inputValue("#f-driverName")) === SECRET.driver);
+ok("운수사 명이 자동으로 채워진다", (await page.inputValue("#f-carrierName")) === SECRET.carrier);
+ok("건마다 달라지는 사업장은 비어 있다", (await page.inputValue("#f-siteName")) === "");
+
+// ── 링크로 서명 요청 ─────────────────────────────────────────────────
+await page.fill("#f-siteName", SECRET.site2);
+await page.fill("#f-siteLocation", "부산 강서구 신항남로");
+await page.fill("#f-containerNo", "TEMU7654321");
+await page.fill("#f-requestedEntryAt", "2026-03-09T07:00");
+await page.fill("#f-entryAt", "2026-03-09T07:35");
+await page.fill("#f-exitAt", "2026-03-09T11:20");
+await page.getByRole("button", { name: "카톡으로 서명 요청" }).click();
+await page.waitForSelector("[data-testid=share-url]");
+
+const shareUrl = (await page.locator("[data-testid=share-url]").innerText()).trim();
+ok("서명 요청 링크가 만들어진다", shareUrl.startsWith(BASE) && shareUrl.includes("#r="), shareUrl.slice(0, 80));
+ok("링크가 카톡에 넣을 만한 길이다", shareUrl.length < 2000, `${shareUrl.length}자`);
+const linkNotice = await page.locator("body").innerText();
+ok("링크에 내용이 들어 있다는 사실을 숨기지 않는다", linkNotice.includes("링크 주소 안에 들어 있습니다"));
+ok("PDF를 기사에게 되돌려줘야 한다고 알려준다", linkNotice.includes("다시 보내주어야"));
+await page.screenshot({ path: path.join(OUT, "6-link.png"), fullPage: true });
+
+await page.getByRole("button", { name: "목록으로" }).click();
+await page.waitForSelector("[data-testid=doc-list]");
+ok("링크로 요청한 건은 '서명 기다리는 중'으로 남는다",
+   (await page.locator("[data-testid=doc-list]").innerText()).includes("서명 기다리는 중"));
+
+// ── 화주 기기: 링크만으로 서명한다 ───────────────────────────────────
+const { context: guestCtx, page: guestPage } = await makeContext();
+await guestPage.goto(shareUrl, { waitUntil: "networkidle" });
+const guestText = await guestPage.locator("body").innerText();
+ok("링크를 열면 누가 요청했는지 먼저 보인다", guestText.includes(`${SECRET.carrier} 요청`), guestText.slice(0, 60));
+ok("링크를 열면 확인서 내용이 그대로 보인다",
+   guestText.includes(SECRET.site2) && guestText.includes("TEMU7654321") && guestText.includes("2026년 3월 9일 11시 20분"),
+   guestText.slice(0, 200));
+ok("화주 화면에도 서명 의무 조항이 나온다",
+   guestText.includes("서명 의무 조항") && guestText.includes("별표 1 24.다."));
+ok("화주 화면에는 입력 칸이 없다 (읽고 서명만 한다)",
+   (await guestPage.locator("#f-siteName").count()) === 0);
+await guestPage.screenshot({ path: path.join(OUT, "7-guest.png"), fullPage: true });
+
+await guestPage.fill("#f-confirmerOrg", "부산신항 운영팀");
+await guestPage.fill("#f-confirmerName", SECRET.guestSigner);
+await signOn(guestPage, "화주");
+await downloadGuest(guestPage, "cert-wait-link.pdf");
+await guestPage.waitForTimeout(400);
+ok("화주가 서명하면 되돌려 보내라고 안내한다",
+   (await guestPage.locator("body").innerText()).includes("보내주셔야"));
+ok("화주 기기에는 아무것도 저장하지 않는다",
+   await guestPage.evaluate(() => !window.localStorage.getItem("bait.docs.v1")));
+await guestPage.screenshot({ path: path.join(OUT, "8-guest-done.png"), fullPage: true });
+
+// ── 받았음 표시 ──────────────────────────────────────────────────────
+await page.bringToFront();
+await page.getByRole("button", { name: "받았음" }).first().click();
+await page.waitForTimeout(200);
+ok("서명된 PDF를 받으면 목록에서 '받음'으로 바뀐다",
+   (await page.locator("[data-testid=doc-list]").innerText()).includes("받음"));
+
 // ── 나머지 두 종류 ───────────────────────────────────────────────────
 for (const [label, file, fill, after] of [
   ["험로·오지 확인서", "cert-rough.pdf", async () => {
     await page.fill("#f-siteName", "강원 정선 레미콘 현장");
-    await page.fill("#f-vehicleNo", "81버9900");
     await page.fill("#f-occurredAt", "2026-03-06T09:20");
     await page.getByRole("button", { name: "비포장, 자갈길 등 불량도로" }).click();
     await page.getByRole("button", { name: "급경사 구간" }).click();
   }, async () => {
-    const text = await page.locator("body").innerText();
-    ok("험로·오지 확인서에는 서명 의무 조항을 붙이지 않는다", !text.includes("서명 의무 조항"));
+    ok("험로·오지 확인서에는 서명 의무 조항을 붙이지 않는다",
+       !(await page.locator("body").innerText()).includes("서명 의무 조항"));
   }],
   ["컨테이너 세척 · 손상 교체 확인서", "cert-wash.pdf", async () => {
     await page.fill("#f-siteName", "부산 신항 세척장");
     await page.fill("#f-containerNo", "ABCU1234567");
-    await page.fill("#f-vehicleNo", "12가3456");
     await page.fill("#f-occurredAt", "2026-03-07T13:05");
   }, async () => {
     const text = await page.locator("body").innerText();
@@ -222,17 +306,18 @@ for (const [label, file, fill, after] of [
        text.includes("서명 의무 조항") && text.includes("별표 1 18.가."));
   }],
 ]) {
-  await page.getByRole("button", { name: "확인서 하나 더 만들기" }).click();
   await page.getByRole("button", { name: new RegExp(label.replace(/[·.]/g, ".")) }).click();
+  await page.waitForSelector("#f-siteName");
   await fill();
-  await page.getByRole("button", { name: "서명 받기" }).click();
+  await page.getByRole("button", { name: "여기서 서명받기" }).click();
   await page.waitForSelector("#f-confirmerName");
   await after();
-  await page.fill("#f-confirmerName", "이순신");
-  await sign();
-  const name = await download(file);
-  ok(`${label} PDF를 내려받는다`, true, name);
+  await page.fill("#f-confirmerName", SECRET.guestSigner);
+  await sign(label);
+  await download(file);
   await page.waitForTimeout(300);
+  await page.getByRole("button", { name: "확인서 하나 더 만들기" }).click();
+  await page.waitForSelector("[data-testid=doc-list]");
 }
 
 // ── 개인정보가 서버로 나갔는가 ────────────────────────────────────────
@@ -251,21 +336,27 @@ for (const value of Object.values(SECRET)) {
 }
 ok("입력값이 어떤 요청에도 실려 나가지 않는다", leaked.length === 0, leaked.join(" | "));
 
+// 링크의 내용은 `#` 뒤에 있다. 브라우저가 서버로 보내지 않아야 한다.
+const payload = shareUrl.split("#r=")[1] ?? "";
+ok("링크에 담은 내용이 서버 요청에 실리지 않는다",
+   payload.length > 0 && !outbound.some((r) => r.url.includes(payload.slice(0, 40))),
+   `${payload.length}자`);
+
 const counterBodies = posts.map((r) => r.body);
 ok("카운터 요청의 본문을 실제로 읽었다",
-   counterBodies.length === 3 && counterBodies.every((b) => b.length > 0),
+   counterBodies.length >= 5 && counterBodies.every((b) => b.length > 0),
    `${counterBodies.filter((b) => b.length > 0).length}/${counterBodies.length}건`);
-ok("카운터가 보내는 값은 종류와 재사용 구간뿐이다",
-   counterBodies.length > 0 && counterBodies.every((b) => {
+ok("카운터가 보내는 값은 종류·재사용 구간·경로뿐이다",
+   counterBodies.every((b) => {
      try {
-       const parsed = JSON.parse(b);
-       return Object.keys(parsed).sort().join(",") === "kind,repeat";
+       return Object.keys(JSON.parse(b)).sort().join(",") === "kind,repeat,via";
      } catch { return false; }
    }),
-   counterBodies.join(" "));
-const kinds = counterBodies.map((b) => { try { return JSON.parse(b).kind; } catch { return "?"; } });
-ok("확인서 3종이 각각 한 번씩 집계됐다",
-   JSON.stringify(kinds) === JSON.stringify(["WAIT", "ROUGH_ROAD", "WASH_SWAP"]), kinds.join(","));
+   counterBodies.join(" ").slice(0, 150));
+const vias = counterBodies.map((b) => { try { return JSON.parse(b).via; } catch { return "?"; } });
+ok("현장 서명·링크 요청·링크 서명이 각각 구분되어 집계된다",
+   vias.includes("here") && vias.includes("request") && vias.includes("link"),
+   vias.join(","));
 
 // ── 만들어진 PDF를 다시 열어 본다 ────────────────────────────────────
 const waitPdf = path.join(OUT, "cert-wait.pdf");
@@ -275,26 +366,66 @@ ok("PDF 제목이 별지 서식의 제목이다", waitText.includes("컨테이�
 ok("PDF에 별지 서식 번호가 찍힌다", waitText.includes("[별지 제4호서식]"));
 ok("PDF에 입차요청시각 칸이 있다", waitText.includes("입차요청시각(화주)"));
 ok("날짜가 바뀐 대기를 서식 표기 그대로 찍는다",
-   waitText.includes("2026년 3월 4일 21시 30분") && waitText.includes("2026년 3월 5일 01시 45분"),
-   waitText.match(/2026년 3월 [45]일[^)]{0,20}/g)?.join(" | "));
+   waitText.includes("2026년 3월 4일 21시 30분") && waitText.includes("2026년 3월 5일 01시 45분"));
 ok("PDF에 고시의 확인 문구와 근거 조항이 들어간다",
    waitText.includes("별표 1 24.다.") && waitText.includes("상호 보완하여 사용할 수 있습니다"));
 ok("PDF에 서식의 참고 설명이 들어간다", waitText.includes("입차요청시각 : 화주가 상·하차지에 입차를 요청한 시각"));
 ok("계산하지 않은 자리는 PDF에도 미지원으로 남는다", waitText.includes("미지원"));
-ok("다 채운 서식에는 (미기재)가 없다", !waitText.includes("(미기재)"), waitText.slice(0, 120));
+ok("다 채운 서식에는 (미기재)가 없다", !waitText.includes("(미기재)"));
+
+const linkPdf = await pdfText(path.join(OUT, "cert-wait-link.pdf"));
+ok("링크로 받은 서명도 같은 서식의 PDF가 된다",
+   linkPdf.includes("[별지 제4호서식]") && linkPdf.includes(SECRET.site2) && linkPdf.includes(SECRET.guestSigner),
+   linkPdf.slice(0, 120));
+ok("링크로 받은 PDF에도 입차요청시각이 들어간다", linkPdf.includes("2026년 3월 9일 07시 00분"));
 
 const roughText = await pdfText(path.join(OUT, "cert-rough.pdf"));
-ok("고른 항목은 채운 네모로 찍힌다", roughText.includes("\u25a0 비포장, 자갈길 등 불량도로"), roughText.slice(0, 120));
-ok("고르지 않은 항목도 빈 네모로 남는다", roughText.includes("\u25a1 당사자 간 합의하는 경우"));
+ok("고른 항목은 채운 네모로 찍힌다", roughText.includes("■ 비포장, 자갈길 등 불량도로"), roughText.slice(0, 120));
+ok("고르지 않은 항목도 빈 네모로 남는다", roughText.includes("□ 당사자 간 합의하는 경우"));
 ok("적지 않은 칸은 (미기재)로 찍힌다", roughText.includes("(미기재)"));
 
 // 폰트를 통째로 임베드했는지를 크기로 본다. subset: true로 바뀌면 한글이 빈칸이 되면서
 // 크기가 뚝 떨어진다. 글자 추출만으로는 그 사고를 잡지 못한다.
-const size = await pdfBytes(waitPdf);
-ok("한글 폰트를 통째로 임베드한다", size > 600_000, `${Math.round(size / 1024)}KB`);
+ok("한글 폰트를 통째로 임베드한다", (await pdfBytes(waitPdf)) > 600_000,
+   `${Math.round((await pdfBytes(waitPdf)) / 1024)}KB`);
+
+// ── 폰의 공유 기능을 쓸 수 있으면 그걸 먼저 쓴다 ─────────────────────
+{
+  const shareCtx = await browser.newContext({ ...devices["iPhone 13"], acceptDownloads: true, locale: "ko-KR" });
+  await shareCtx.addInitScript(() => {
+    window.__shared = [];
+    Navigator.prototype.canShare = () => true;
+    Navigator.prototype.share = async (data) => {
+      window.__shared.push((data.files ?? []).map((f) => `${f.name}:${f.type}`));
+    };
+  });
+  const sharePage = await shareCtx.newPage();
+  await sharePage.goto(shareUrl, { waitUntil: "networkidle" });
+  await sharePage.fill("#f-confirmerName", "최무선");
+  await signOn(sharePage, "공유");
+  await sharePage.getByRole("button", { name: "서명 완료 · PDF 만들기" }).click();
+  await sharePage.waitForSelector("text=서명이 끝났습니다");
+  await sharePage.getByRole("button", { name: /PDF 보내기/ }).click();
+  await sharePage.waitForTimeout(500);
+  const shared = await sharePage.evaluate(() => window.__shared);
+  ok("공유 기능이 있으면 PDF 파일을 그대로 넘긴다",
+     shared.length === 1 && shared[0][0]?.endsWith(":application/pdf"),
+     JSON.stringify(shared));
+  await shareCtx.close();
+}
+
+// ── 이 폰에 저장된 것을 한 번에 지울 수 있다 ─────────────────────────
+page.once("dialog", (d) => void d.accept());
+await page.getByRole("button", { name: "이 폰에 저장된 기록 전부 지우기" }).click();
+await page.waitForTimeout(300);
+ok("전부 지우면 목록이 사라진다", (await page.locator("[data-testid=doc-list]").count()) === 0);
+ok("전부 지우면 저장소도 비어 있다",
+   await page.evaluate(() => !window.localStorage.getItem("bait.docs.v1") && !window.localStorage.getItem("bait.me.v1")));
 
 ok("자바스크립트 오류가 없다", pageErrors.length === 0, pageErrors.join(" | "));
 
+await guestCtx.close();
+await ctx.close();
 await browser.close();
 
 let failed = 0;

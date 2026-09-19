@@ -7,6 +7,7 @@
 import { PDFDocument, PDFFont, PDFPage, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { CertType, DISCLAIMER, Field, OfficialForm, splitPicked } from "./certs";
+import { formatFormDate, formatFormDateTime } from "./format";
 
 const FONT_URL = "/fonts/NanumGothic-Regular.ttf";
 
@@ -44,17 +45,6 @@ export interface CertDoc {
   confirmerName: string;
   signaturePng: string;
   createdAt: Date;
-}
-
-/**
- * datetime-local 값("2026-03-04T14:02")을 서식의 표기로 바꾼다.
- * 서식은 "2026년 __월 __일 __시 __분" 칸이다. 빈 값은 빈 문자열로 둔다.
- */
-export function formatFormDateTime(raw: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(raw.trim());
-  if (!m) return raw.trim();
-  const [, y, mo, d, h, mi] = m;
-  return `${y}년 ${Number(mo)}월 ${Number(d)}일 ${h}시 ${mi}분`;
 }
 
 /**
@@ -302,11 +292,6 @@ export async function buildCertPdf(doc: CertDoc): Promise<Blob> {
 export function formatStamp(d: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-
-/** 서식의 작성일 칸은 "2026년 __월 __일"이다. */
-export function formatFormDate(d: Date): string {
-  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
 }
 
 export function fileNameFor(doc: CertDoc): string {

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import FieldInput from "@/components/FieldInput";
 import SignaturePad, { SignaturePadHandle } from "@/components/SignaturePad";
+import SurveyCard from "@/components/SurveyCard";
 import {
   CERT_TYPES,
   CONFIRMER_FIELDS,
@@ -20,6 +21,7 @@ import { formatFormDateTime } from "@/lib/format";
 import { unprintable } from "@/lib/font-coverage";
 import { decodeRequest, requestUrl } from "@/lib/link";
 import { countGenerated, markVisit } from "@/lib/metrics";
+import { shouldAsk, type SurveySet } from "@/lib/survey";
 import {
   DocRecord,
   DocStatus,
@@ -103,6 +105,8 @@ export default function Page() {
   const [guest, setGuest] = useState<{ form: OfficialForm; cert: CertType; from: string } | null>(null);
   const [guestPdf, setGuestPdf] = useState<{ blob: Blob; name: string } | null>(null);
   const [hasInk, setHasInk] = useState(false);
+  // 설문을 물을지는 localStorage를 읽어야 안다. 서버 렌더와 어긋나지 않게 화면에 붙은 뒤에 정한다.
+  const [ask, setAsk] = useState<SurveySet | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const padRef = useRef<SignaturePadHandle>(null);
@@ -144,6 +148,7 @@ export default function Page() {
     setShareUrl("");
     setCopied(false);
     setHasInk(false);
+    setAsk(null);
     setError(null);
     padRef.current?.clear();
     refreshDocs();
@@ -272,6 +277,7 @@ export default function Page() {
         signaturePng: png,
       });
       countGenerated(cert.id, "here");
+      setAsk(shouldAsk("maker") ? "maker" : null);
       setMode("done");
     } catch (e) {
       setError(e instanceof Error ? e.message : "PDF를 만들지 못했습니다. 다시 시도해 주세요.");
@@ -305,6 +311,7 @@ export default function Page() {
       const blob = await buildCertPdf(doc);
       setGuestPdf({ blob, name: fileNameFor(doc) });
       countGenerated(guest.cert.id, "link");
+      setAsk(shouldAsk("signer") ? "signer" : null);
       setMode("guest-done");
     } catch (e) {
       setError(e instanceof Error ? e.message : "PDF를 만들지 못했습니다. 다시 시도해 주세요.");
@@ -652,6 +659,7 @@ export default function Page() {
                 PDF 보내기 · 내려받기
               </button>
             </div>
+            {ask === "signer" && <SurveyCard set="signer" onClose={() => setAsk(null)} />}
           </div>
         )}
 
@@ -667,6 +675,7 @@ export default function Page() {
                 확인서 하나 더 만들기
               </button>
             </div>
+            {ask === "maker" && <SurveyCard set="maker" onClose={() => setAsk(null)} />}
           </div>
         )}
 

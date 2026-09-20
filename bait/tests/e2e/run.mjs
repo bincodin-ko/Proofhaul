@@ -213,6 +213,23 @@ ok("파일명을 한글 서식 이름 · 입차 날짜 · 차량번호로 짓는
    savedName === `컨테이너대기시간확인서_2026-03-04_${SECRET.vehicle}.pdf`, savedName);
 await page.screenshot({ path: path.join(OUT, "4-done.png"), fullPage: true });
 
+// ── PDF를 준 다음에 묻는 설문 ────────────────────────────────────────
+ok("PDF를 받은 뒤에 설문이 뜬다", (await page.locator(".survey").count()) === 1);
+ok("설문이 PDF를 인질로 잡지 않는다 (이미 내려받은 뒤다)",
+   (await page.evaluate(() => window.__downloadNames.length)) === 1);
+ok("설문이 몇 문항인지 먼저 보여준다",
+   (await page.locator(".survey .sv-step").innerText()).trim() === "1 / 3");
+await page.getByRole("button", { name: "운송사 · 주선사" }).click();
+await page.waitForTimeout(150);
+await page.getByRole("button", { name: "한 달에 100만원쯤" }).click();
+await page.waitForTimeout(150);
+await page.getByRole("button", { name: "카톡 사진으로 남긴다" }).click();
+await page.waitForTimeout(400);
+ok("다 답하면 고맙다고 하고 끝난다",
+   (await page.locator(".survey").innerText()).includes("고맙습니다"));
+await page.screenshot({ path: path.join(OUT, "9-survey.png"), fullPage: true });
+await page.getByRole("button", { name: "닫기" }).click();
+
 // ── 이 폰에 남는 기록 ────────────────────────────────────────────────
 await page.getByRole("button", { name: "확인서 하나 더 만들기" }).click();
 await page.waitForSelector("[data-testid=doc-list]");
@@ -274,8 +291,20 @@ await downloadGuest(guestPage, "cert-wait-link.pdf");
 await guestPage.waitForTimeout(400);
 ok("화주가 서명하면 되돌려 보내라고 안내한다",
    (await guestPage.locator("body").innerText()).includes("보내주셔야"));
-ok("화주 기기에는 아무것도 저장하지 않는다",
+ok("화주 기기에는 확인서를 저장하지 않는다",
    await guestPage.evaluate(() => !window.localStorage.getItem("bait.docs.v1")));
+
+// 화주에게는 다른 것을 묻는다. 이쪽 답이 제일 귀하다.
+ok("화주에게도 설문이 뜬다", (await guestPage.locator(".survey").count()) === 1);
+await guestPage.getByRole("button", { name: "화주 · 물류센터 · 현장" }).click();
+await guestPage.waitForTimeout(150);
+ok("화주에게는 손실액이 아니라 서명 태도를 묻는다",
+   (await guestPage.locator(".survey").innerText()).includes("서명 요청을 받으면"));
+await guestPage.getByRole("button", { name: "잘 안 해준다" }).click();
+await guestPage.waitForTimeout(150);
+await guestPage.getByRole("button", { name: "카톡으로 사진을 보낸다" }).click();
+await guestPage.waitForTimeout(400);
+ok("화주 설문도 끝까지 간다", (await guestPage.locator(".survey").innerText()).includes("고맙습니다"));
 await guestPage.screenshot({ path: path.join(OUT, "8-guest-done.png"), fullPage: true });
 
 // ── 받았음 표시 ──────────────────────────────────────────────────────
@@ -316,6 +345,7 @@ for (const [label, file, fill, after] of [
   await sign(label);
   await download(file);
   await page.waitForTimeout(300);
+  ok(`이미 답한 사람에게 다시 묻지 않는다 (${label})`, (await page.locator(".survey").count()) === 0);
   await page.getByRole("button", { name: "확인서 하나 더 만들기" }).click();
   await page.waitForSelector("[data-testid=doc-list]");
 }
@@ -323,9 +353,11 @@ for (const [label, file, fill, after] of [
 // ── 개인정보가 서버로 나갔는가 ────────────────────────────────────────
 await Promise.all(bodyReads);
 const posts = outbound.filter((r) => r.method !== "GET" && r.via === "cdp");
-ok("서버로 보내는 요청은 익명 카운터뿐이다",
-   posts.every((r) => new URL(r.url).pathname === "/api/count"),
+ok("서버로 보내는 요청은 익명 카운터와 설문뿐이다",
+   posts.every((r) => ["/api/count", "/api/survey"].includes(new URL(r.url).pathname)),
    posts.map((r) => `${r.method} ${new URL(r.url).pathname}`).join(", ") || "없음");
+const counters = posts.filter((r) => new URL(r.url).pathname === "/api/count");
+const surveys = posts.filter((r) => new URL(r.url).pathname === "/api/survey");
 
 const leaked = [];
 for (const value of Object.values(SECRET)) {
@@ -342,7 +374,7 @@ ok("링크에 담은 내용이 서버 요청에 실리지 않는다",
    payload.length > 0 && !outbound.some((r) => r.url.includes(payload.slice(0, 40))),
    `${payload.length}자`);
 
-const counterBodies = posts.map((r) => r.body);
+const counterBodies = counters.map((r) => r.body);
 ok("카운터 요청의 본문을 실제로 읽었다",
    counterBodies.length >= 5 && counterBodies.every((b) => b.length > 0),
    `${counterBodies.filter((b) => b.length > 0).length}/${counterBodies.length}건`);
@@ -357,6 +389,24 @@ const vias = counterBodies.map((b) => { try { return JSON.parse(b).via; } catch 
 ok("현장 서명·링크 요청·링크 서명이 각각 구분되어 집계된다",
    vias.includes("here") && vias.includes("request") && vias.includes("link"),
    vias.join(","));
+
+// 설문이 보내는 것은 고른 보기 값뿐이다.
+const surveyBodies = surveys.map((r) => r.body);
+ok("설문 응답이 서버로 간다", surveyBodies.length === 2, `${surveyBodies.length}건`);
+ok("설문은 고른 보기 값만 보낸다",
+   surveyBodies.every((b) => {
+     try {
+       const parsed = JSON.parse(b);
+       const values = Object.values(parsed.answers ?? {});
+       return Object.keys(parsed).sort().join(",") === "answers,set"
+         && values.length === 3
+         && values.every((v) => typeof v === "string" && /^[a-z0-9]+$/.test(v));
+     } catch { return false; }
+   }),
+   surveyBodies.join(" ").slice(0, 200));
+ok("운송사 쪽 답과 화주 쪽 답이 구분된다",
+   surveyBodies.some((b) => b.includes('"set":"maker"')) && surveyBodies.some((b) => b.includes('"set":"signer"')),
+   surveyBodies.join(" ").slice(0, 120));
 
 // ── 만들어진 PDF를 다시 열어 본다 ────────────────────────────────────
 const waitPdf = path.join(OUT, "cert-wait.pdf");

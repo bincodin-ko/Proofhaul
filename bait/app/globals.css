@@ -318,3 +318,24 @@ input[aria-invalid="true"],select[aria-invalid="true"]{border-color:var(--miss);
   max-height:132px;overflow-y:auto;
   user-select:all;
 }
+
+/* ---------- 2주 실험 설문 (PDF를 준 다음에만 묻는다) ---------- */
+.survey{
+  margin-top:24px;text-align:left;
+  border:1px solid var(--note-line);border-radius:var(--r-2);
+  background:var(--note-bg);color:var(--note-ink);
+  padding:16px 16px 14px;
+}
+.survey .sv-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.survey .sv-step{font-size:13px;font-weight:700;color:#5A4409;font-variant-numeric:tabular-nums}
+.survey .sv-skip{
+  border:0;background:none;padding:6px 2px;
+  font-size:14px;color:var(--ink-3);text-decoration:underline;cursor:pointer;
+}
+.survey .sv-title{font-size:17px;font-weight:700;line-height:1.45;color:#5A4409}
+.survey .sv-hint{margin-top:4px;font-size:14px;line-height:1.5;color:var(--note-ink)}
+.survey .sv-options{display:grid;gap:8px;margin-top:14px}
+.survey .sv-options .btn{min-height:50px;font-size:16px;justify-content:flex-start;text-align:left;background:#fff}
+.survey .sv-body{margin-top:12px;font-size:13px;line-height:1.6;color:var(--ink-3)}
+.survey.survey-thanks{text-align:left}
+.survey.survey-thanks .btn{margin-top:12px;min-height:46px}

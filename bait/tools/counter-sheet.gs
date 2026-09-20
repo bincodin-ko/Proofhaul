@@ -33,6 +33,10 @@
  *   =COUNTIF(D2:D,"request")          링크로 서명을 요청한 횟수
  *   =COUNTIF(D2:D,"link")             링크를 받은 쪽이 실제로 서명한 횟수
  *
+ * 설문은 두 번째 시트("설문")에 쌓인다. 제일 중요한 칸은 D열이다.
+ *   =COUNTIF(설문!D2:D,"m100")+COUNTIF(설문!D2:D,"m300")   월 100만원 이상 잃는다고 답한 수
+ *   =COUNTIF(설문!D2:D,"avoid")                           서명을 잘 안 해준다고 답한 화주 수
+ *
  * 마지막 두 줄이 이번 실험에서 제일 중요하다. request는 많은데 link가 0이면
  * 링크를 보내도 아무도 서명하지 않는다는 뜻이고, 그게 제품의 핵심 가정이 틀렸다는
  * 신호다.
@@ -42,12 +46,34 @@ var KINDS = ["WAIT", "ROUGH_ROAD", "WASH_SWAP"];
 var REPEATS = ["first", "2-3", "4+"];
 var VIAS = ["here", "request", "link"];
 
+/** 설문은 두 번째 시트에 따로 쌓는다. 카운터와 섞으면 둘 다 못 센다. */
+function surveySheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("설문");
+  if (!sheet) {
+    sheet = ss.insertSheet("설문");
+    sheet.appendRow(["시각(KST)", "묶음", "역할", "손실액/서명태도", "현재방식"]);
+  }
+  return sheet;
+}
+
 function doPost(e) {
   var body = {};
   try {
     body = JSON.parse(e.postData.contents);
   } catch (err) {
     // 못 읽는 본문은 조용히 버린다. 카운터 실패는 사용자와 무관하다.
+  }
+
+  if (body.evt === "survey") {
+    surveySheet_().appendRow([
+      Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM-dd HH:mm:ss"),
+      String(body.set || ""),
+      String(body.role || ""),
+      String(body.loss || body.ask || ""),
+      String(body.how || body.howasked || ""),
+    ]);
+    return ContentService.createTextOutput("ok");
   }
 
   // 허용 목록에 없는 값은 적지 않는다. 시트에 이상한 게 섞이는 걸 막는다.
